@@ -53,6 +53,10 @@ const scheduler = new OneShotScheduler({
 });
 scheduler.setPlugin(manifest('alpha'));
 scheduler.setPlugin(manifest('beta'));
+scheduler.setPlugin(manifest('hourly', 3_600_000));
+if (scheduler.snapshot().plugins.find(plugin => plugin.id === 'hourly').nextDueUs > 1_000_000)
+    throw new Error('Long-interval plugin was not phased into the startup window');
+scheduler.removePlugin('hourly');
 scheduler.start();
 if (timer.sources.size !== 1)
     throw new Error('Scheduler did not retain exactly one deadline source');
@@ -62,9 +66,9 @@ scheduler.poll();
 await settle();
 if (starts.length !== 1)
     throw new Error('Scheduler did not serialize the first due run');
+const snapshotWhileRunning = scheduler.snapshot();
 const firstId = starts[0].id;
 const secondId = firstId === 'alpha' ? 'beta' : 'alpha';
-const snapshotWhileRunning = scheduler.snapshot();
 const queued = snapshotWhileRunning.plugins.find(plugin => plugin.id === secondId);
 if (queued.pending?.reason !== 'periodic')
     throw new Error('Second due plugin did not remain in the bounded queue');

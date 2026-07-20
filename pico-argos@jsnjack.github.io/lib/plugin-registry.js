@@ -63,6 +63,8 @@ export class PluginRegistry {
         const errors = [];
         for (const candidate of candidates.sort((left, right) =>
             left.name.localeCompare(right.name))) {
+            if (!PLUGIN_ID_PATTERN.test(candidate.name))
+                continue;
             if (plugins.length === MAX_PLUGINS) {
                 errors.push({id: candidate.name, message: `Plugin limit ${MAX_PLUGINS} reached`});
                 continue;
@@ -99,9 +101,18 @@ export class PluginRegistry {
                     this._scheduleFromRoot(otherFile);
             });
         const candidates = await enumerateDirectories(this.root, this._cancellable);
+        const candidateIds = new Set();
         for (const candidate of candidates) {
-            if (PLUGIN_ID_PATTERN.test(candidate.name))
+            if (PLUGIN_ID_PATTERN.test(candidate.name)) {
+                candidateIds.add(candidate.name);
                 this._monitorPlugin(candidate.name);
+                if (!this._known.has(candidate.name))
+                    this._scheduleReload(candidate.name);
+            }
+        }
+        for (const id of this._known.keys()) {
+            if (!candidateIds.has(id))
+                this._scheduleReload(id);
         }
     }
 

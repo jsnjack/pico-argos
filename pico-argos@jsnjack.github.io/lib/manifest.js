@@ -125,6 +125,8 @@ function validateCommand(value, pluginDirectory) {
     const command = value.map((element, index) => {
         if (typeof element !== 'string')
             throw new ManifestError(`Manifest command element ${index} must be a string`);
+        if (element.includes('\0'))
+            throw new ManifestError(`Manifest command element ${index} contains NUL`);
         const bytes = new TextEncoder().encode(element).length;
         if (bytes > 4_096)
             throw new ManifestError(`Manifest command element ${index} exceeds 4096 bytes`);

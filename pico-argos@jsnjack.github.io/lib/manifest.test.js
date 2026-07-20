@@ -61,6 +61,7 @@ assertEqual(normalizedStream.maxBytesPerMinute, 262_144, 'byte default');
 
 assertInvalid({id: 'other'}, /directory/);
 assertInvalid({command: ['../escape']}, /escapes/);
+assertInvalid({command: ['./run', 'bad\0argument']}, /NUL/);
 assertInvalid({timeoutMs: 5_000}, /less than/);
 assertInvalid({maxStaleMs: 1_000}, /at least/);
 assertInvalid({passEnvironment: ['TOKEN', 'TOKEN']}, /duplicated/);

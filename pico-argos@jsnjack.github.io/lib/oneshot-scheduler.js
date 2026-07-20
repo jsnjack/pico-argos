@@ -234,10 +234,8 @@ function comparePending(left, right) {
 
 function nextPhasedDeadline(nowUs, intervalMs, pluginId) {
     const intervalUs = intervalMs * 1_000;
-    const phaseUs = stableHash(pluginId) % intervalUs;
-    const intervalStartUs = Math.floor(nowUs / intervalUs) * intervalUs;
-    const candidateUs = intervalStartUs + phaseUs;
-    return candidateUs > nowUs ? candidateUs : candidateUs + intervalUs;
+    const startupWindowUs = Math.min(intervalUs, 1_000_000);
+    return nowUs + 1 + stableHash(pluginId) % startupWindowUs;
 }
 
 function stableHash(value) {

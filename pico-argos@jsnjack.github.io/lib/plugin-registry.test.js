@@ -52,6 +52,7 @@ function deletePlugin(directory) {
 const later = createPlugin('later', {order: 20});
 const earlier = createPlugin('earlier', {order: 10});
 const invalid = createPlugin('invalid', {timeoutMs: 5_000});
+const ignored = createPlugin('.editor-temporary', {id: '.editor-temporary'});
 
 const discoveryRegistry = new PluginRegistry(rootPath);
 const result = await discoveryRegistry.discover();
@@ -98,5 +99,6 @@ monitoringRegistry.cancel();
 deletePlugin(later);
 deletePlugin(earlier);
 deletePlugin(invalid);
+deletePlugin(ignored);
 root.delete(null);
 print('ok - plugin registry discovers valid owned plugins asynchronously');
