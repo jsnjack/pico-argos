@@ -6,6 +6,7 @@ export default [
             ecmaVersion: 'latest',
             sourceType: 'module',
             globals: {
+                console: 'readonly',
                 global: 'readonly',
                 print: 'readonly',
                 printerr: 'readonly',

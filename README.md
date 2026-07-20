@@ -16,7 +16,9 @@ counters in the default `summary` diagnostics mode. The `off` GSettings value
 disables collection for overhead comparisons. Its menu can start or stop a
 30-second detailed trace. Changed label writes arm feature-detected stage hooks
 for at most 100 ms, and events enter a fixed 16,384-slot numeric ring. Trace
-export and the target-system A/B capture remain Phase 0 work.
+serialization runs in bounded idle slices, writes asynchronously below
+`$XDG_CACHE_HOME/pico-argos/diagnostics/`, and emits `TraceReady` with the
+completed path. The target-system A/B capture remains Phase 0 work.
 
 The enabled extension exposes the versioned diagnostics interface from
 `SPEC.md`. For example:

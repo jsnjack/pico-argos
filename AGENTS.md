@@ -54,6 +54,8 @@ The current Phase 0 flow is:
    arms feature-detected stage signals only after a visible label write.
 6. `DiagnosticService` exposes bounded summary and transient trace controls on
    the versioned session D-Bus interface.
+7. Stopped traces are encoded in bounded idle slices, written asynchronously
+   below the XDG cache directory, and announced through `TraceReady`.
 
 The planned universal runtime flow remains:
 
@@ -125,7 +127,7 @@ does not belong in that schema.
 
 ## Known Issues
 
-- Phase 0 trace export and target-hardware A/B capture are not implemented yet.
+- Phase 0 target-hardware A/B capture has not been run yet.
 - Plugin discovery, subprocess protocol runners, semantic plugin state, and
   production rendering begin only after the Phase 0 performance gate passes.
 - Distribution through extensions.gnome.org is not assumed because arbitrary

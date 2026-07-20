@@ -75,7 +75,7 @@ export class DiagnosticService {
         if (traceId === null) {
             invocation.return_dbus_error(
                 BUSY_ERROR,
-                'A diagnostic trace is already active');
+                'A diagnostic trace or export is already active');
             return;
         }
 

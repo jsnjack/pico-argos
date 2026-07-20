@@ -7,7 +7,7 @@ import {PerformanceController} from './lib/performance-controller.js';
 /** GNOME Shell lifecycle entry point for pico-argos. */
 export default class PicoArgosExtension extends Extension {
     enable() {
-        this._controller = new PerformanceController(this.getSettings());
+        this._controller = new PerformanceController(this.getSettings(), this.metadata);
         this._controller.enable();
     }
 

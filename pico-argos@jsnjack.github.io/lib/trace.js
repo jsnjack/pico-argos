@@ -51,17 +51,24 @@ export class TraceRing {
         };
     }
 
+    /** Returns one numeric event without allocating the complete history. */
+    eventAt(index) {
+        if (!Number.isInteger(index) || index < 0 || index >= this.length)
+            throw new RangeError(`Invalid trace event index: ${index}`);
+
+        return [
+            this._eventIds[index],
+            this._timestampsUs[index],
+            this._cycleIds[index],
+            this._viewIds[index],
+        ];
+    }
+
     /** Returns a serializable event copy for a stopped-session export. */
     events() {
         const events = new Array(this.length);
-        for (let index = 0; index < this.length; index++) {
-            events[index] = [
-                this._eventIds[index],
-                this._timestampsUs[index],
-                this._cycleIds[index],
-                this._viewIds[index],
-            ];
-        }
+        for (let index = 0; index < this.length; index++)
+            events[index] = this.eventAt(index);
         return events;
     }
 }

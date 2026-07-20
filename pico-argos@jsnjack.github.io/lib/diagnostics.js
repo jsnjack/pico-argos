@@ -28,6 +28,7 @@ export const HARNESS_PHASES = Object.freeze([
     'get-summary',
     'scheduler-callback',
     'spawn-call',
+    'trace-serialize',
     'ui-apply',
 ]);
 
@@ -96,6 +97,7 @@ export class Diagnostics {
         this._traceId = 0;
         this._trace = null;
         this._traceActive = false;
+        this._traceTiming = null;
         this.setMode(mode);
     }
 
@@ -119,23 +121,43 @@ export class Diagnostics {
     }
 
     /** Starts one transient detailed trace and returns its identifier. */
-    startTrace() {
+    startTrace(timing = null) {
         if (this._traceActive)
             throw new Error('A diagnostic trace is already active');
 
         this._traceId++;
         this._trace = new TraceRing();
         this._traceActive = true;
+        this._traceTiming = {
+            startedMonotonicUs: timing?.monotonicUs ?? null,
+            startedRealtimeUs: timing?.realtimeUs ?? null,
+            endedMonotonicUs: null,
+            endedRealtimeUs: null,
+        };
         return this._traceId;
     }
 
     /** Stops the active detailed trace and returns its identifier. */
-    stopTrace() {
+    stopTrace(timing = null) {
         if (!this._traceActive)
             return null;
 
         this._traceActive = false;
+        this._traceTiming.endedMonotonicUs = timing?.monotonicUs ?? null;
+        this._traceTiming.endedRealtimeUs = timing?.realtimeUs ?? null;
         return this._traceId;
+    }
+
+    /** Returns the stopped trace data needed by the asynchronous exporter. */
+    stoppedTrace() {
+        if (this._trace === null || this._traceActive)
+            return null;
+
+        return {
+            id: this._traceId,
+            timing: {...this._traceTiming},
+            ring: this._trace,
+        };
     }
 
     /** Records one numeric event in the active detailed trace. */
@@ -196,6 +218,7 @@ export class Diagnostics {
                 : {
                     id: this._traceId,
                     active: this._traceActive,
+                    timing: {...this._traceTiming},
                     ...this._trace.summary(),
                 },
         };

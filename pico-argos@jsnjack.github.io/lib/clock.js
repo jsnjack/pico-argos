@@ -8,4 +8,9 @@ export class MonotonicClock {
     nowUs() {
         return GLib.get_monotonic_time();
     }
+
+    /** Returns the current realtime timestamp in microseconds. */
+    realtimeUs() {
+        return GLib.get_real_time();
+    }
 }

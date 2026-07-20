@@ -76,6 +76,12 @@ const cases = [
         assertEqual(diagnostics.snapshot().trace, {
             id: traceId,
             active: true,
+            timing: {
+                startedMonotonicUs: null,
+                startedRealtimeUs: null,
+                endedMonotonicUs: null,
+                endedRealtimeUs: null,
+            },
             capacity: 16_384,
             eventCount: 1,
             dropped: 0,

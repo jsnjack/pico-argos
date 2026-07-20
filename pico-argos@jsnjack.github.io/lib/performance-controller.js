@@ -2,7 +2,9 @@
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import System from 'system';
 
+import * as Config from 'resource:///org/gnome/shell/misc/config.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {MonotonicClock} from './clock.js';
@@ -11,6 +13,7 @@ import {Diagnostics} from './diagnostics.js';
 import {PerformanceIndicator} from './render.js';
 import {StageTrace} from './stage-trace.js';
 import {SyntheticOutput, SYNTHETIC_MODES} from './synthetic-output.js';
+import {TraceExporter} from './trace-exporter.js';
 
 const UPDATE_INTERVAL_MS = 250;
 const SPAWN_INTERVAL_MS = 1_000;
@@ -20,8 +23,9 @@ const SYNTHETIC_COMMAND = ['/usr/bin/true'];
 
 /** Owns the lifecycle of the Phase 0 synthetic performance harness. */
 export class PerformanceController {
-    constructor(settings) {
+    constructor(settings, metadata) {
         this._settings = settings;
+        this._metadata = metadata;
         this._generation = 0;
         this._timerId = 0;
         this._traceTimerId = 0;
@@ -30,6 +34,7 @@ export class PerformanceController {
         this._spawnProcess = null;
         this._spawnCancellable = null;
         this._mode = null;
+        this._traceExporter = null;
     }
 
     /** Creates the harness actors, settings connection, and one workload timer. */
@@ -81,7 +86,9 @@ export class PerformanceController {
         this._diagnosticService?.destroy();
         this._diagnosticService = null;
         this._stopTimer();
-        this._stopTrace();
+        this._stopTrace(false);
+        this._traceExporter?.cancel();
+        this._traceExporter = null;
         this._cancelSpawn();
 
         if (this._settingsSignalId !== 0) {
@@ -98,6 +105,7 @@ export class PerformanceController {
         this._diagnostics = null;
         this._clock = null;
         this._mode = null;
+        this._metadata = null;
     }
 
     _selectMode(mode) {
@@ -147,29 +155,93 @@ export class PerformanceController {
     }
 
     _startTrace(durationSeconds = TRACE_DURATION_SECONDS) {
-        if (this._diagnostics.traceActive)
+        if (this._diagnostics.traceActive || this._traceExporter !== null)
             return null;
 
-        const traceId = this._diagnostics.startTrace();
+        const traceId = this._diagnostics.startTrace({
+            monotonicUs: this._clock.nowUs(),
+            realtimeUs: this._clock.realtimeUs(),
+        });
         this._traceTimerId = GLib.timeout_add_seconds(
             GLib.PRIORITY_DEFAULT,
             durationSeconds,
             () => {
                 this._traceTimerId = 0;
                 this._stageTrace.disarm();
-                this._diagnostics.stopTrace();
+                this._completeTrace();
                 return GLib.SOURCE_REMOVE;
             });
         return traceId;
     }
 
-    _stopTrace() {
+    _stopTrace(exportTrace = true) {
         if (this._traceTimerId !== 0) {
             GLib.source_remove(this._traceTimerId);
             this._traceTimerId = 0;
         }
         this._stageTrace?.disarm();
-        this._diagnostics?.stopTrace();
+        if (this._diagnostics?.traceActive) {
+            if (exportTrace)
+                this._completeTrace();
+            else
+                this._diagnostics.stopTrace(this._traceEndTiming());
+        }
+    }
+
+    _completeTrace() {
+        this._diagnostics.stopTrace(this._traceEndTiming());
+        const traceData = this._diagnostics.stoppedTrace();
+        const document = this._buildTraceDocument(traceData);
+        this._traceExporter = new TraceExporter(
+            this._clock,
+            traceData,
+            document,
+            {
+                onSlice: durationUs => this._diagnostics.recordDuration(
+                    'trace-serialize', durationUs),
+                onComplete: path => {
+                    this._traceExporter = null;
+                    this._diagnosticService?.emitTraceReady(traceData.id, path);
+                },
+                onError: error => {
+                    this._traceExporter = null;
+                    console.error(`[pico-argos] Trace export failed: ${error.message}`);
+                },
+            });
+        this._traceExporter.start();
+    }
+
+    _traceEndTiming() {
+        return {
+            monotonicUs: this._clock.nowUs(),
+            realtimeUs: this._clock.realtimeUs(),
+        };
+    }
+
+    _buildTraceDocument(traceData) {
+        return {
+            formatVersion: 1,
+            project: 'pico-argos',
+            extensionVersion: this._metadata.version,
+            environment: {
+                shellVersion: Config.PACKAGE_VERSION,
+                gjsVersion: System.version,
+                monitors: Main.layoutManager.monitors.map(monitor => ({
+                    index: monitor.index,
+                    x: monitor.x,
+                    y: monitor.y,
+                    width: monitor.width,
+                    height: monitor.height,
+                })),
+            },
+            trace: {
+                id: traceData.id,
+                timing: traceData.timing,
+                ...traceData.ring.summary(),
+                eventSchema: ['eventId', 'timestampUs', 'cycleId', 'viewId'],
+            },
+            summary: this._diagnostics.snapshot(),
+        };
     }
 
     _getSummary() {
