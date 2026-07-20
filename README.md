@@ -55,6 +55,11 @@ mutation counters. Transient traces use a fixed 16,384-slot ring, bounded idle
 serialization, asynchronous export below the XDG cache directory, and the
 versioned D-Bus interface shown above.
 
+The preferences window exposes the persistent diagnostics mode, on-demand
+plugin health, bounded phase percentiles, actor mutation totals, and trace
+record/stop/export/reset controls. It polls the live summary only while the
+Diagnostics page is visible.
+
 CPU, memory, disk, and network behavior is provided by the optional
 `plugins/system-monitor` stream plugin, not the extension core. It samples
 retained Linux counter sources from one persistent GJS process, uses actual

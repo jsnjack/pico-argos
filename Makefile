@@ -63,6 +63,7 @@ package-check:
 		$(MAKE) package; \
 		test -s "$(BUILD_DIR)/$(UUID)/schemas/gschemas.compiled"; \
 		unzip -Z1 "$(PACKAGE)" | rg -q '^lib/extension-controller\.js$$'; \
+		unzip -Z1 "$(PACKAGE)" | rg -q '^prefs\.js$$'; \
 		unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/org\.gnome\.shell\.extensions\.pico-argos\.gschema\.xml$$'; \
 		! unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/gschemas\.compiled$$'; \
 		! unzip -Z1 "$(PACKAGE)" | rg -q '\.test\.js$$'; \

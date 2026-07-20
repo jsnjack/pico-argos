@@ -75,6 +75,8 @@ The current Phase 0 flow is:
     creates keyed menu actors only on first open.
 14. `ExtensionController` wires the monitored registry, runtimes, renderer, and
     production diagnostic interface with generation-guarded teardown.
+15. `prefs.js` reads the live bounded summary only while its Diagnostics page
+    is visible and exposes summary mode, trace, export/stop, and reset controls.
 
 The production universal runtime flow is:
 
@@ -147,7 +149,6 @@ does not belong in that schema.
 ## Known Issues
 
 - Phase 0 target-hardware A/B capture has not been run yet.
-- Network-backed reference plugins and the preferences UI are still under
-  construction.
+- Target-hardware frame-latency acceptance measurements remain outstanding.
 - Distribution through extensions.gnome.org is not assumed because arbitrary
   executable plugin support may conflict with review policy.
