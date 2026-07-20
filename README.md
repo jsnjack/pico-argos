@@ -48,8 +48,10 @@ snapshots, accepts HTTPS links only, suppresses identical raw and semantic
 state, and emits keyed panel/menu change sets. The asynchronous registry also
 discovers only owned, non-writable plugin trees, enforces the global plugin
 bound, orders valid manifests, and safely retains the prior definition while an
-edited replacement is invalid. Bounded process execution is the next runtime
-layer.
+edited replacement is invalid. The one-shot scheduler uses one monotonic timer,
+coalesces a single token per plugin, prioritizes menu refreshes, and dispatches
+at most one child globally. Its runner drains both pipes asynchronously,
+enforces byte and timeout limits, validates UTF-8, and reaps every direct child.
 
 CPU, memory, disk, network, GitHub, VPN, and weather behavior will be reference
 plugins, not features embedded in the extension runtime.

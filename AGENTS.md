@@ -61,6 +61,9 @@ The current Phase 0 flow is:
    version 1 validation and semantic no-op core used by the upcoming runtime.
 9. `PluginRegistry` asynchronously validates owned plugin trees, publishes an
    ordered initial set, and debounces atomic manifest/executable replacement.
+10. `OneShotScheduler` deterministically phases deadlines, coalesces bounded
+    work, and serializes dispatch to `OneShotRunner`, which concurrently drains,
+    limits, terminates, and reaps each direct child.
 
 The planned universal runtime flow remains:
 
@@ -133,7 +136,7 @@ does not belong in that schema.
 ## Known Issues
 
 - Phase 0 target-hardware A/B capture has not been run yet.
-- Subprocess protocol runners, runtime scheduling, and production rendering are
-  still under construction.
+- Stream supervision, runtime integration, and production rendering are still
+  under construction.
 - Distribution through extensions.gnome.org is not assumed because arbitrary
   executable plugin support may conflict with review policy.
