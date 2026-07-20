@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "id": "system-monitor",
+  "mode": "stream",
+  "command": ["gjs", "-m", "./run.js"],
+  "startupTimeoutMs": 2000,
+  "heartbeatTimeoutMs": 5000,
+  "maxMessagesPerSecond": 5,
+  "maxBytesPerMinute": 262144,
+  "position": "right",
+  "order": 0,
+  "nice": 10,
+  "reserveTextChars": 47,
+  "passEnvironment": [],
+  "failurePolicy": "show-error",
+  "maxStaleMs": 10000
+}

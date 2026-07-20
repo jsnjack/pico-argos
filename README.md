@@ -55,8 +55,11 @@ mutation counters. Transient traces use a fixed 16,384-slot ring, bounded idle
 serialization, asynchronous export below the XDG cache directory, and the
 versioned D-Bus interface shown above.
 
-CPU, memory, disk, network, GitHub, VPN, and weather behavior will be reference
-plugins, not features embedded in the extension runtime.
+CPU, memory, disk, and network behavior is provided by the optional
+`plugins/system-monitor` stream plugin, not the extension core. It samples
+retained Linux counter sources from one persistent GJS process, uses actual
+monotonic elapsed time, and emits one fixed-width combined indicator. GitHub,
+VPN, and weather integrations follow the same public plugin protocol.
 
 Run the repository validation gate with:
 

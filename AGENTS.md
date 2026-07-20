@@ -31,7 +31,7 @@ pico-argos@jsnjack.github.io/   Installable GNOME Shell 50 extension source
   extension.js                  Production lifecycle entry point
   lib/                          Diagnostics, runtime, state, and persistent rendering
   schemas/                      Extension GSettings schema
-plugins/                        Future reference plugins, outside the extension artifact
+plugins/                        Reference protocol plugins, outside the extension artifact
 tests/                          Future integration and performance fixtures
 ```
 
@@ -147,6 +147,7 @@ does not belong in that schema.
 ## Known Issues
 
 - Phase 0 target-hardware A/B capture has not been run yet.
-- Reference plugins and the preferences UI are still under construction.
+- Network-backed reference plugins and the preferences UI are still under
+  construction.
 - Distribution through extensions.gnome.org is not assumed because arbitrary
   executable plugin support may conflict with review policy.

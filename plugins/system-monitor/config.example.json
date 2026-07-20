@@ -1,0 +1,7 @@
+{
+  "fastIntervalMs": 250,
+  "diskIntervalMs": 500,
+  "memoryIntervalMs": 1000,
+  "diskDevice": "auto",
+  "networkInterface": "auto"
+}
