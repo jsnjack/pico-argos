@@ -1,0 +1,16 @@
+{
+  "manifestVersion": 1,
+  "id": "dependabot",
+  "mode": "oneshot",
+  "command": ["gjs", "-m", "./run.js"],
+  "intervalMs": 3600000,
+  "timeoutMs": 30000,
+  "refreshOnOpen": true,
+  "position": "right",
+  "order": 10,
+  "nice": 10,
+  "reserveTextChars": 3,
+  "passEnvironment": ["GITHUB_TOKEN", "GITHUB_REPOSITORY"],
+  "failurePolicy": "keep-last",
+  "maxStaleMs": 7200000
+}

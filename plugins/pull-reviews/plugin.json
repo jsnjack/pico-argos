@@ -1,0 +1,16 @@
+{
+  "manifestVersion": 1,
+  "id": "pull-reviews",
+  "mode": "oneshot",
+  "command": ["gjs", "-m", "./run.js"],
+  "intervalMs": 300000,
+  "timeoutMs": 20000,
+  "refreshOnOpen": true,
+  "position": "right",
+  "order": 20,
+  "nice": 10,
+  "reserveTextChars": 3,
+  "passEnvironment": ["GITHUB_TOKEN", "GITHUB_USER", "GITHUB_REPOSITORIES"],
+  "failurePolicy": "keep-last",
+  "maxStaleMs": 600000
+}
