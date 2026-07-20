@@ -131,34 +131,37 @@ export class PluginIndicator {
     _applyPanel(panel, stale) {
         let writes = 0;
         const panelVisible = panel !== null && panel.visible;
-        const text = panel?.text ?? '';
-        const icon = panel?.icon ?? '';
-
-        writes += this._write(
-            this._label,
-            'text',
-            text,
-            'label-text-writes');
+        if (panelVisible && panel.text !== null) {
+            writes += this._write(
+                this._label,
+                'text',
+                panel.text,
+                'label-text-writes');
+        }
         writes += this._write(
             this._label,
             'visible',
             panelVisible && panel.text !== null,
             'visibility-writes');
-        writes += this._write(
-            this._icon,
-            'icon_name',
-            icon,
-            'icon-name-writes');
+        if (panelVisible && panel.icon !== null) {
+            writes += this._write(
+                this._icon,
+                'icon_name',
+                panel.icon,
+                'icon-name-writes');
+        }
         writes += this._write(
             this._icon,
             'visible',
             panelVisible && panel.icon !== null,
             'visibility-writes');
-        writes += this._write(
-            this.actor,
-            'accessible_name',
-            panel?.accessibleName ?? panel?.text ?? this.plugin.id,
-            'accessible-name-writes');
+        if (panelVisible) {
+            writes += this._write(
+                this.actor,
+                'accessible_name',
+                panel.accessibleName ?? panel.text ?? this.plugin.id,
+                'accessible-name-writes');
+        }
         writes += this._write(
             this.actor,
             'visible',
@@ -167,7 +170,8 @@ export class PluginIndicator {
 
         const appearance = panel?.appearance ?? 'normal';
         const severity = panel?.severity ?? 'normal';
-        writes += this._applyStyle(appearance, severity, stale);
+        if (panelVisible)
+            writes += this._applyStyle(appearance, severity, stale);
         this._panel = panel;
         this._stale = stale;
         return writes;
