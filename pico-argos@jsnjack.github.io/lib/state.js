@@ -51,20 +51,38 @@ export class DistinctText {
 
 /** Suppresses raw and semantic no-ops and emits minimal explicit changes. */
 export class StateStore {
-    constructor(parser = raw => parseProtocolMessage(raw)) {
+    constructor(parser = (raw, options) => parseProtocolMessage(raw, options)) {
         this._parser = parser;
         this._entries = new Map();
     }
 
     /** Accepts one raw snapshot string for a plugin. */
     accept(pluginId, raw) {
-        const previous = this._entries.get(pluginId);
-        if (previous?.raw === raw && !previous.failureActive && !previous.stale)
-            return {kind: 'raw-no-op', snapshot: previous.validSnapshot, changes: null};
-
-        const message = this._parser(raw);
-        if (message.kind !== 'snapshot')
+        const processed = this.acceptProtocol(pluginId, raw);
+        if (processed.message.kind !== 'snapshot')
             throw new Error('StateStore accepts snapshots only');
+        return processed.state;
+    }
+
+    /** Raw-compares, parses once, and accepts a snapshot or stream heartbeat. */
+    acceptProtocol(pluginId, raw, options = {}) {
+        const previous = this._entries.get(pluginId);
+        if (previous?.raw === raw && !previous.failureActive && !previous.stale) {
+            return {
+                message: {kind: 'snapshot', snapshot: previous.validSnapshot},
+                state: {
+                    kind: 'raw-no-op',
+                    snapshot: previous.validSnapshot,
+                    changes: null,
+                },
+            };
+        }
+
+        const {validateSnapshot = null, ...parserOptions} = options;
+        const message = this._parser(raw, parserOptions);
+        if (message.kind === 'heartbeat')
+            return {message, state: null};
+        validateSnapshot?.(message.snapshot);
 
         const snapshot = message.snapshot;
         const changes = previous === undefined
@@ -80,9 +98,13 @@ export class StateStore {
             stale: false,
         });
 
-        if (changes === null)
-            return {kind: 'semantic-no-op', snapshot, changes: null};
-        return {kind: 'changed', snapshot, changes};
+        if (changes === null) {
+            return {
+                message,
+                state: {kind: 'semantic-no-op', snapshot, changes: null},
+            };
+        }
+        return {message, state: {kind: 'changed', snapshot, changes}};
     }
 
     /** Returns the last valid semantic snapshot for a plugin. */
@@ -97,7 +119,17 @@ export class StateStore {
 
     /** Applies one failure policy without discarding the last valid state. */
     applyFailure(pluginId, policy) {
-        const entry = this._entries.get(pluginId);
+        let entry = this._entries.get(pluginId);
+        if (entry === undefined && policy === 'show-error') {
+            entry = {
+                raw: null,
+                validSnapshot: null,
+                effectiveSnapshot: Object.freeze({panel: null, menu: Object.freeze([])}),
+                failureActive: false,
+                stale: false,
+            };
+            this._entries.set(pluginId, entry);
+        }
         if (entry === undefined || policy === 'keep-last') {
             if (entry !== undefined)
                 entry.failureActive = true;
@@ -108,7 +140,7 @@ export class StateStore {
 
         const effectiveSnapshot = Object.freeze({
             panel: policy === 'hide' ? null : ERROR_PANEL,
-            menu: entry.validSnapshot.menu,
+            menu: entry.validSnapshot?.menu ?? Object.freeze([]),
         });
         const changes = diffSnapshots(entry.effectiveSnapshot, effectiveSnapshot);
         entry.effectiveSnapshot = effectiveSnapshot;
@@ -132,6 +164,13 @@ export class StateStore {
         const snapshot = this.get(pluginId);
         this._entries.delete(pluginId);
         return snapshot;
+    }
+
+    /** Forces the next output through parse and validation after reconfiguration. */
+    invalidateRaw(pluginId) {
+        const entry = this._entries.get(pluginId);
+        if (entry !== undefined)
+            entry.raw = null;
     }
 
     /** Clears all retained raw and semantic state. */

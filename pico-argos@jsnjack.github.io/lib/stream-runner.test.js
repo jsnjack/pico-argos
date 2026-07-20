@@ -3,6 +3,7 @@
 import GLib from 'gi://GLib';
 
 import {MonotonicClock} from './clock.js';
+import {parseProtocolMessage} from './protocol.js';
 import {StreamRunError, StreamRunner} from './stream-runner.js';
 
 const fixture = GLib.canonicalize_filename(
@@ -38,15 +39,21 @@ async function expectFailure(mode, expectedKind, overrides = {}, callbacks = {})
 
 const kinds = [];
 await expectFailure('messages', 'stdout-eof', {}, {
-    onMessage: (_raw, message) => kinds.push(message.kind),
+    onMessage: raw => {
+        const message = parseProtocolMessage(raw, {allowHeartbeat: true});
+        kinds.push(message.kind);
+        return message;
+    },
 });
 if (JSON.stringify(kinds) !== JSON.stringify(['snapshot', 'heartbeat']))
     throw new Error(`Runner did not parse complete stream messages: ${JSON.stringify(kinds)}`);
 
 let splitText = null;
 await expectFailure('split-utf8', 'stdout-eof', {}, {
-    onMessage: (_raw, message) => {
+    onMessage: raw => {
+        const message = parseProtocolMessage(raw, {allowHeartbeat: true});
         splitText = message.snapshot.panel.text;
+        return message;
     },
 });
 if (splitText !== '€')

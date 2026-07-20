@@ -55,6 +55,10 @@ enforces byte and timeout limits, validates UTF-8, and reaps every direct child.
 The stream path preserves UTF-8 sequences across reads, frames bounded lines,
 enforces message/stdout/stderr rates and liveness, serializes starts, admits at
 most four children, and locks persistent crash loops after bounded backoff.
+Both execution modes now feed one runtime/state path: heartbeats bypass state,
+identical raw snapshots stop before parsing, semantic no-ops stop before UI
+work, failure policies transition once, and staleness changes only on coarse
+ticks.
 
 CPU, memory, disk, network, GitHub, VPN, and weather behavior will be reference
 plugins, not features embedded in the extension runtime.

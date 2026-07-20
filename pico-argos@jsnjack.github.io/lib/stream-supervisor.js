@@ -155,7 +155,8 @@ export class StreamSupervisor {
             },
             onMessage: (raw, message) => {
                 if (this._isCurrent(state, generation))
-                    this._onMessage?.(plugin, raw, message);
+                    return this._onMessage?.(plugin, raw, message);
+                return message;
             },
         }).catch(error => {
             if (this._isCurrent(state, generation) && error.kind !== 'cancelled')

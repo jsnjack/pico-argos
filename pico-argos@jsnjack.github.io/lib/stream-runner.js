@@ -98,7 +98,11 @@ export class StreamRunner {
             chunk => {
                 const lines = framer.push(chunk, this._clock.nowUs());
                 for (const raw of lines) {
-                    const message = parseProtocolMessage(raw, {allowHeartbeat: true});
+                    const message = onMessage === null
+                        ? parseProtocolMessage(raw, {allowHeartbeat: true})
+                        : onMessage(raw);
+                    if (message?.kind !== 'snapshot' && message?.kind !== 'heartbeat')
+                        throw new Error('Stream message callback must return a parsed message');
                     if (message.kind === 'snapshot' && !context.started) {
                         context.started = true;
                         removeSource(context, 'startupSourceId');
@@ -106,7 +110,6 @@ export class StreamRunner {
                     }
                     if (message.kind === 'snapshot' || context.started)
                         this._resetHeartbeat(context, manifest);
-                    onMessage?.(raw, message);
                 }
             },
             () => {

@@ -107,6 +107,36 @@ const cases = [
         assertEqual(store.setStale('test', true).kind, 'stale-no-op', 'repeated stale');
         assertEqual(store.accept('test', raw).changes.stale, false, 'stale recovery');
     }],
+    ['stream heartbeats bypass state and repeated snapshots bypass parsing', () => {
+        let parses = 0;
+        const store = new StateStore((raw, options) => {
+            parses++;
+            if (raw === 'heartbeat') {
+                if (!options.allowHeartbeat)
+                    throw new Error('Heartbeat was not enabled');
+                return {kind: 'heartbeat'};
+            }
+            return {kind: 'snapshot', snapshot: JSON.parse(raw)};
+        });
+        const snapshot = {
+            panel: {visible: true, text: 'ok', icon: null, appearance: 'normal', accessibleName: null, severity: 'normal'},
+            menu: [],
+        };
+        const raw = JSON.stringify(snapshot);
+        assertEqual(store.acceptProtocol('stream', 'heartbeat', {allowHeartbeat: true}).state,
+            null, 'heartbeat state');
+        store.acceptProtocol('stream', raw, {allowHeartbeat: true});
+        assertEqual(store.acceptProtocol('stream', raw, {allowHeartbeat: true}).state.kind,
+            'raw-no-op', 'stream raw no-op');
+        assertEqual(parses, 2, 'stream parse calls');
+    }],
+    ['show-error can present before the first valid snapshot', () => {
+        const store = new StateStore();
+        const result = store.applyFailure('new-plugin', 'show-error');
+        assertEqual(result.kind, 'failure-changed', 'initial error transition');
+        assertEqual(store.getEffective('new-plugin').panel.icon,
+            'dialog-error-symbolic', 'initial error icon');
+    }],
 ];
 
 for (const [name, test] of cases) {
