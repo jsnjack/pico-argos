@@ -56,6 +56,8 @@ The current Phase 0 flow is:
    the versioned session D-Bus interface.
 7. Stopped traces are encoded in bounded idle slices, written asynchronously
    below the XDG cache directory, and announced through `TraceReady`.
+8. `manifest.js`, `protocol.js`, and `state.js` provide the Shell-independent
+   version 1 validation and semantic no-op core used by the upcoming runtime.
 
 The planned universal runtime flow remains:
 

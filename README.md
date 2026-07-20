@@ -41,6 +41,12 @@ The universal runtime will provide two plugin modes after the Phase 0 gate:
 - `stream` supervises one persistent process for frequent or stateful updates
   without recurring process creation.
 
+The version 1 manifest and output protocol core is implemented as pure GJS.
+It strictly rejects unknown fields, normalizes immutable manifests and
+snapshots, accepts HTTPS links only, suppresses identical raw and semantic
+state, and emits keyed panel/menu change sets. Process discovery and execution
+are the next runtime layer.
+
 CPU, memory, disk, network, GitHub, VPN, and weather behavior will be reference
 plugins, not features embedded in the extension runtime.
 

@@ -36,7 +36,8 @@ lint:
 	fi
 
 test:
-	@mapfile -t tests < <(find . -type f -name '*.test.js' -not -path './node_modules/*' | sort); \
+	@set -e; \
+	mapfile -t tests < <(find . -type f -name '*.test.js' -not -path './node_modules/*' | sort); \
 	if (( $${#tests[@]} == 0 )); then \
 		echo "==> test: no GJS tests yet"; \
 	else \
