@@ -54,8 +54,8 @@ const coordinator = new RenderCoordinator({
 const alpha = {id: 'alpha'};
 const beta = {id: 'beta'};
 for (let value = 0; value < 10_000; value++)
-    coordinator.queue(alpha, {value});
-coordinator.queue(beta, {value: 2});
+    coordinator.queue(alpha, {value}, value + 1);
+coordinator.queue(beta, {value: 2}, 7);
 if (timer.sources.size !== 1)
     throw new Error('Render coordinator created more than one pending source');
 if (timer.fire() !== 0)
@@ -64,6 +64,8 @@ if (JSON.stringify(applied) !== JSON.stringify([['alpha', 9_999], ['beta', 2]]))
     throw new Error(`Render coordinator did not collapse to latest models: ${applied}`);
 if (batches[0].pluginCount !== 2 || batches[0].writes !== 2)
     throw new Error('Render batch summary is incorrect');
+if (batches[0].cycleId !== 10_000)
+    throw new Error('Render batch did not retain its newest accepted cycle ID');
 
 coordinator.queue(alpha, {value: 10_000});
 if (timer.nextDelay() !== 100)

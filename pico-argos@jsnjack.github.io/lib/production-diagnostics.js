@@ -35,6 +35,7 @@ export class ProductionDiagnostics {
         this._settingsSignalId = 0;
         this._traceTimerId = 0;
         this._traceExporter = null;
+        this._lastTraceLogUs = null;
     }
 
     enable() {
@@ -57,7 +58,11 @@ export class ProductionDiagnostics {
         this._diagnostics.recordDuration('ui-apply', batch.applyEndUs - batch.applyBeginUs);
         if (batch.writes === 0)
             return;
-        const cycleId = this._diagnostics.nextCycleId();
+        const cycleId = batch.cycleId;
+        this._diagnostics.recordTraceEvent(
+            TRACE_EVENTS.UI_APPLY_BEGIN,
+            batch.applyBeginUs,
+            cycleId);
         this._diagnostics.recordTraceEvent(
             TRACE_EVENTS.UI_APPLY_END,
             batch.applyEndUs,
@@ -141,7 +146,12 @@ export class ProductionDiagnostics {
                 onComplete: path => {
                     this._traceExporter = null;
                     this._service?.emitTraceReady(traceData.id, path);
-                    console.log(`[pico-argos] Diagnostic trace ready: ${path}`);
+                    const nowUs = this._clock.nowUs();
+                    if (this._lastTraceLogUs === null ||
+                        nowUs - this._lastTraceLogUs >= 60_000_000) {
+                        this._lastTraceLogUs = nowUs;
+                        console.log(`[pico-argos] Diagnostic trace ready: ${path}`);
+                    }
                 },
                 onError: error => {
                     this._traceExporter = null;
@@ -166,6 +176,7 @@ export class ProductionDiagnostics {
                     y: monitor.y,
                     width: monitor.width,
                     height: monitor.height,
+                    refreshRate: monitor.refreshRate ?? monitor.refresh_rate ?? null,
                 })),
             },
             manifests: this._getPlugins().map(sanitizePlugin),
@@ -175,7 +186,7 @@ export class ProductionDiagnostics {
                 id: traceData.id,
                 timing: traceData.timing,
                 ...traceData.ring.summary(),
-                eventSchema: ['eventId', 'timestampUs', 'cycleId', 'viewId'],
+                eventSchema: ['eventId', 'timestampUs', 'correlationId', 'detailId'],
             },
             summary: this._diagnostics.snapshot(),
         };

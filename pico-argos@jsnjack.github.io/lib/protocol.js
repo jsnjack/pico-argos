@@ -30,6 +30,7 @@ export class ProtocolError extends Error {
     constructor(message) {
         super(message);
         this.name = 'ProtocolError';
+        this.kind = 'protocol';
     }
 }
 

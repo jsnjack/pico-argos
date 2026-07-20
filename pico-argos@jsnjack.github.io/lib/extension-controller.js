@@ -10,6 +10,7 @@ import {ProductionDiagnostics} from './production-diagnostics.js';
 import {RenderCoordinator} from './render-coordinator.js';
 import {RuntimeManager} from './runtime-manager.js';
 import {StageTrace} from './stage-trace.js';
+import {TRACE_EVENTS} from './trace.js';
 
 const MAX_REGISTRY_ERRORS = 32;
 
@@ -62,8 +63,13 @@ export class ExtensionController {
         });
         this._runtime = new RuntimeManager({
             clock: this._clock,
-            onChanges: (plugin, _changes, _kind, presentation) =>
-                this._coordinator.queue(plugin, presentation),
+            onChanges: (plugin, _changes, _kind, presentation, cycleId) => {
+                this._diagnostics.recordTraceEvent(
+                    TRACE_EVENTS.UI_QUEUED,
+                    this._clock.nowUs(),
+                    cycleId);
+                this._coordinator.queue(plugin, presentation, cycleId);
+            },
             onPluginAdded: plugin => this._renderer.addPlugin(plugin),
             onPluginChanged: (plugin, previous) =>
                 this._renderer.changePlugin(plugin, previous),
@@ -71,9 +77,15 @@ export class ExtensionController {
                 this._coordinator.remove(plugin.id);
                 this._renderer.removePlugin(plugin);
             },
-            onEvent: event => this._recordRuntimeEvent(event),
-            onPhase: (name, durationUs) =>
-                this._diagnostics.recordDuration(name, durationUs),
+            onEvent: event => {
+                if (this._enabled && generation === this._generation)
+                    this._recordRuntimeEvent(event);
+            },
+            onPhase: (name, durationUs) => {
+                if (this._enabled && generation === this._generation)
+                    this._diagnostics.recordDuration(name, durationUs);
+            },
+            nextCycleId: () => this._diagnostics.nextCycleId(),
         });
         this._registry = new PluginRegistry();
 
@@ -140,9 +152,33 @@ export class ExtensionController {
     }
 
     _recordRuntimeEvent(event) {
+        if (!this._enabled || this._diagnostics === null)
+            return;
         if (event.runtime === 'oneshot' && event.kind === 'started') {
             const latenessUs = Math.max(0, this._clock.nowUs() - event.deadlineUs);
             this._diagnostics.recordDuration('scheduler-lateness', latenessUs);
+            this._diagnostics.recordTraceEvent(
+                TRACE_EVENTS.SCHEDULED_DUE,
+                event.deadlineUs,
+                0);
+            this._diagnostics.recordTraceEvent(
+                TRACE_EVENTS.SCHEDULER_CALLBACK_BEGIN,
+                this._clock.nowUs(),
+                0);
+        }
+        const traceEvent = RUNTIME_TRACE_EVENTS[event.kind];
+        if (traceEvent !== undefined) {
+            this._diagnostics.recordTraceEvent(
+                traceEvent,
+                event.timestampUs ?? this._clock.nowUs(),
+                event.cycleId ?? event.runId ?? event.error?.details?.runId ?? 0,
+                event.sequence ?? 0);
+        }
+        if (event.runtime === 'stream' && event.kind === 'failure') {
+            this._diagnostics.recordTraceEvent(
+                TRACE_EVENTS.STREAM_RESTART_SCHEDULED,
+                this._clock.nowUs(),
+                event.error?.details?.runId ?? 0);
         }
         if (event.kind === 'limit')
             this._recordRegistryError(event.pluginId, event.message);
@@ -166,3 +202,23 @@ export class ExtensionController {
         });
     }
 }
+
+const RUNTIME_TRACE_EVENTS = Object.freeze({
+    'launch-begin': TRACE_EVENTS.LAUNCH_BEGIN,
+    'spawn-return': TRACE_EVENTS.SPAWN_RETURN,
+    'first-stdout-byte': TRACE_EVENTS.FIRST_STDOUT_BYTE,
+    'stream-first-snapshot': TRACE_EVENTS.STREAM_FIRST_SNAPSHOT,
+    'stream-line-complete': TRACE_EVENTS.STREAM_LINE_COMPLETE,
+    'stream-heartbeat': TRACE_EVENTS.STREAM_HEARTBEAT,
+    'stdout-eof': TRACE_EVENTS.STDOUT_EOF,
+    'stderr-eof': TRACE_EVENTS.STDERR_EOF,
+    'process-exit': TRACE_EVENTS.PROCESS_EXIT,
+    'decode-begin': TRACE_EVENTS.DECODE_BEGIN,
+    'decode-end': TRACE_EVENTS.DECODE_END,
+    'raw-compare-end': TRACE_EVENTS.RAW_COMPARE_END,
+    'parse-begin': TRACE_EVENTS.PARSE_BEGIN,
+    'parse-end': TRACE_EVENTS.PARSE_END,
+    'validate-end': TRACE_EVENTS.VALIDATE_END,
+    'semantic-diff-end': TRACE_EVENTS.SEMANTIC_DIFF_END,
+    'snapshot-accepted': TRACE_EVENTS.SNAPSHOT_ACCEPTED,
+});

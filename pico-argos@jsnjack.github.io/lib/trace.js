@@ -10,6 +10,28 @@ export const TRACE_EVENTS = Object.freeze({
     STAGE_BEFORE_PAINT: 3,
     STAGE_AFTER_PAINT: 4,
     STAGE_PRESENTED: 5,
+    SCHEDULED_DUE: 6,
+    SCHEDULER_CALLBACK_BEGIN: 7,
+    LAUNCH_BEGIN: 8,
+    SPAWN_RETURN: 9,
+    FIRST_STDOUT_BYTE: 10,
+    STREAM_FIRST_SNAPSHOT: 11,
+    STREAM_LINE_COMPLETE: 12,
+    STREAM_HEARTBEAT: 13,
+    STREAM_RESTART_SCHEDULED: 14,
+    STDOUT_EOF: 15,
+    STDERR_EOF: 16,
+    PROCESS_EXIT: 17,
+    DECODE_BEGIN: 18,
+    DECODE_END: 19,
+    RAW_COMPARE_END: 20,
+    PARSE_BEGIN: 21,
+    PARSE_END: 22,
+    VALIDATE_END: 23,
+    SEMANTIC_DIFF_END: 24,
+    UI_QUEUED: 25,
+    UI_APPLY_BEGIN: 26,
+    SNAPSHOT_ACCEPTED: 27,
 });
 
 /** Stores one trace session in fixed-capacity numeric arrays. */
@@ -24,7 +46,7 @@ export class TraceRing {
         this._eventIds = new Uint8Array(capacity);
         this._timestampsUs = new Float64Array(capacity);
         this._cycleIds = new Float64Array(capacity);
-        this._viewIds = new Uint8Array(capacity);
+        this._viewIds = new Uint32Array(capacity);
     }
 
     /** Records one event or increments the dropped-event counter when full. */

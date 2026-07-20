@@ -8,7 +8,11 @@ import {OneShotRunError, OneShotRunner} from './oneshot-runner.js';
 const fixture = GLib.canonicalize_filename(
     'tests/fixtures/oneshot-fixture.js',
     GLib.get_current_dir());
-const runner = new OneShotRunner({clock: new MonotonicClock()});
+const events = [];
+const runner = new OneShotRunner({
+    clock: new MonotonicClock(),
+    onEvent: event => events.push(event),
+});
 
 function manifest(mode, overrides = {}) {
     return {
@@ -36,6 +40,12 @@ async function expectFailure(mode, expectedKind) {
 const constant = await runner.run(manifest('constant'));
 if (!constant.raw.includes('"text":"ok"'))
     throw new Error('Runner did not retain valid stdout');
+if (!(constant.details.runId > 0) || constant.details.stdoutBytes === 0 ||
+    !events.some(event => event.kind === 'first-stdout-byte' &&
+        event.runId === constant.details.runId) ||
+    !events.some(event => event.kind === 'process-exit' &&
+        event.runId === constant.details.runId))
+    throw new Error('Runner did not correlate bounded process timing details');
 const chunked = await runner.run(manifest('chunked'));
 if (chunked.raw !== constant.raw)
     throw new Error('Runner changed output split across chunks');

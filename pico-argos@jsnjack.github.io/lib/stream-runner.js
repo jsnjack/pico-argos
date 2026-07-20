@@ -12,21 +12,25 @@ const TERMINATE_GRACE_MS = 250;
 
 /** Describes one supervised stream child failure. */
 export class StreamRunError extends Error {
-    constructor(kind, message, stderr = '') {
+    constructor(kind, message, stderr = '', details = null) {
         super(message);
         this.name = 'StreamRunError';
         this.kind = kind;
         this.stderr = stderr;
+        this.details = details;
     }
 }
 
 /** Owns bounded asynchronous pipes and liveness for stream direct children. */
 export class StreamRunner {
-    constructor({clock, onPhase = null}) {
+    constructor({clock, onPhase = null, onEvent = null, nextRunId = null}) {
         if (typeof clock?.nowUs !== 'function')
             throw new TypeError('StreamRunner requires a monotonic clock');
         this._clock = clock;
         this._onPhase = onPhase;
+        this._onEvent = onEvent;
+        this._localRunId = 0;
+        this._nextRunId = nextRunId ?? (() => ++this._localRunId);
         this._active = new Map();
         this._nicePath = GLib.find_program_in_path('nice');
     }
@@ -42,6 +46,7 @@ export class StreamRunner {
         if (this._active.has(manifest.id))
             throw new StreamRunError('overlap', `Plugin ${manifest.id} is already running`);
 
+        const runId = this._nextRunId();
         const cancellable = new Gio.Cancellable();
         const launcher = new Gio.SubprocessLauncher({
             flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
@@ -53,14 +58,27 @@ export class StreamRunner {
             : [this._nicePath, '-n', String(manifest.nice), ...manifest.command];
 
         const launchBeginUs = this._clock.nowUs();
+        this._emit('launch-begin', manifest.id, runId, launchBeginUs);
         let process;
         try {
             process = launcher.spawnv(argv);
         } catch (error) {
             this._onPhase?.('spawn-call', this._clock.nowUs() - launchBeginUs, manifest.id);
-            throw new StreamRunError('spawn', `Starting stream ${manifest.id}: ${error.message}`);
+            const spawnReturnUs = this._clock.nowUs();
+            this._emit(
+                'spawn-return', manifest.id, runId, spawnReturnUs, 0, {spawned: false});
+            throw new StreamRunError(
+                'spawn',
+                `Starting stream ${manifest.id}: ${error.message}`,
+                '',
+                {runId, launchBeginUs, spawnReturnUs});
         }
-        this._onPhase?.('spawn-call', this._clock.nowUs() - launchBeginUs, manifest.id);
+        const spawnReturnUs = this._clock.nowUs();
+        this._onPhase?.('spawn-call', spawnReturnUs - launchBeginUs, manifest.id);
+        this._emit('spawn-return', manifest.id, runId, spawnReturnUs, 0, {
+            spawned: true,
+            niceApplied: manifest.nice === null || this._nicePath !== null,
+        });
 
         const context = {
             process,
@@ -73,6 +91,11 @@ export class StreamRunner {
             startupSourceId: 0,
             heartbeatSourceId: 0,
             stderr: new StreamStderr(this._clock.nowUs()),
+            firstStdoutUs: null,
+            processExitUs: null,
+            stdoutBytes: 0,
+            stderrBytes: 0,
+            messageSequence: 0,
         };
         this._active.set(manifest.id, context);
         context.startupSourceId = GLib.timeout_add(
@@ -96,17 +119,55 @@ export class StreamRunner {
             process.get_stdout_pipe(),
             cancellable,
             chunk => {
-                const lines = framer.push(chunk, this._clock.nowUs());
+                context.stdoutBytes += chunk.length;
+                if (context.firstStdoutUs === null) {
+                    context.firstStdoutUs = this._clock.nowUs();
+                    this._emit(
+                        'first-stdout-byte',
+                        manifest.id,
+                        runId,
+                        context.firstStdoutUs);
+                }
+                const decodeBeginUs = this._clock.nowUs();
+                this._emit('decode-begin', manifest.id, runId, decodeBeginUs);
+                const lines = framer.push(chunk, decodeBeginUs);
+                const decodeEndUs = this._clock.nowUs();
+                this._emit('decode-end', manifest.id, runId, decodeEndUs);
+                this._onPhase?.('decode', decodeEndUs - decodeBeginUs, manifest.id);
                 for (const raw of lines) {
+                    context.messageSequence++;
+                    this._emit(
+                        'stream-line-complete',
+                        manifest.id,
+                        runId,
+                        this._clock.nowUs(),
+                        context.messageSequence);
                     const message = onMessage === null
                         ? parseProtocolMessage(raw, {allowHeartbeat: true})
-                        : onMessage(raw);
+                        : onMessage(raw, {
+                            runId,
+                            sequence: context.messageSequence,
+                        });
                     if (message?.kind !== 'snapshot' && message?.kind !== 'heartbeat')
                         throw new Error('Stream message callback must return a parsed message');
                     if (message.kind === 'snapshot' && !context.started) {
                         context.started = true;
                         removeSource(context, 'startupSourceId');
+                        this._emit(
+                            'stream-first-snapshot',
+                            manifest.id,
+                            runId,
+                            this._clock.nowUs(),
+                            context.messageSequence);
                         onHealthy?.(this._clock.nowUs());
+                    }
+                    if (message.kind === 'heartbeat') {
+                        this._emit(
+                            'stream-heartbeat',
+                            manifest.id,
+                            runId,
+                            this._clock.nowUs(),
+                            context.messageSequence);
                     }
                     if (message.kind === 'snapshot' || context.started)
                         this._resetHeartbeat(context, manifest);
@@ -114,6 +175,7 @@ export class StreamRunner {
             },
             () => {
                 framer.finish();
+                this._emit('stdout-eof', manifest.id, runId, this._clock.nowUs());
                 if (!context.cancelled)
                     this._terminate(context, 'stdout-eof', `Stream ${manifest.id} closed stdout`);
             }).catch(error => {
@@ -125,8 +187,12 @@ export class StreamRunner {
         const stderrPromise = readStream(
             process.get_stderr_pipe(),
             cancellable,
-            chunk => context.stderr.push(chunk, this._clock.nowUs()),
-            () => {}).catch(error => {
+            chunk => {
+                context.stderrBytes += chunk.length;
+                context.stderr.push(chunk, this._clock.nowUs());
+            },
+            () => this._emit(
+                'stderr-eof', manifest.id, runId, this._clock.nowUs())).catch(error => {
             this._terminate(
                 context,
                 error.kind ?? 'stderr-read',
@@ -134,6 +200,8 @@ export class StreamRunner {
         });
         const waitPromise = waitForProcess(process).then(() => {
             context.exited = true;
+            context.processExitUs = this._clock.nowUs();
+            this._emit('process-exit', manifest.id, runId, context.processExitUs);
             removeSource(context, 'forceSourceId');
             if (!context.cancelled && context.failure === null) {
                 if (process.get_if_exited()) {
@@ -166,7 +234,28 @@ export class StreamRunner {
             kind: 'cancelled',
             message: `Stream ${manifest.id} was cancelled`,
         };
-        throw new StreamRunError(failure.kind, failure.message, context.stderr.text());
+        const details = {
+            runId,
+            launchBeginUs,
+            spawnReturnUs,
+            firstStdoutUs: context.firstStdoutUs,
+            processExitUs: context.processExitUs,
+            stdoutBytes: context.stdoutBytes,
+            stderrBytes: context.stderrBytes,
+            messages: context.messageSequence,
+        };
+        if (context.processExitUs !== null) {
+            this._onPhase?.('child-wall', context.processExitUs - launchBeginUs, manifest.id);
+            this._onPhase?.(
+                'pipe-drain',
+                this._clock.nowUs() - context.processExitUs,
+                manifest.id);
+        }
+        throw new StreamRunError(
+            failure.kind,
+            failure.message,
+            context.stderr.text(),
+            details);
     }
 
     /** Terminates one active stream direct child. */
@@ -227,6 +316,10 @@ export class StreamRunner {
                     context.process.force_exit();
                 return GLib.SOURCE_REMOVE;
             });
+    }
+
+    _emit(kind, pluginId, runId, timestampUs, sequence = 0, extra = {}) {
+        this._onEvent?.({kind, pluginId, runId, timestampUs, sequence, ...extra});
     }
 }
 

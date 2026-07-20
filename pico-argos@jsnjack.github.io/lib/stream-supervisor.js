@@ -153,10 +153,10 @@ export class StreamSupervisor {
                     this._onEvent?.({kind: 'healthy', pluginId: plugin.id});
                 }
             },
-            onMessage: (raw, message) => {
+            onMessage: (raw, context) => {
                 if (this._isCurrent(state, generation))
-                    return this._onMessage?.(plugin, raw, message);
-                return message;
+                    return this._onMessage?.(plugin, raw, context);
+                return {kind: 'heartbeat'};
             },
         }).catch(error => {
             if (this._isCurrent(state, generation) && error.kind !== 'cancelled')

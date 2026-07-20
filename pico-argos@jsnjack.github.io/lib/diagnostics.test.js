@@ -34,6 +34,7 @@ const cases = [
             sumUs: 10_022,
             minimumUs: 10,
             maximumUs: 10_001,
+            recentViolationUs: 10_001,
             buckets: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         }, 'duration summary');
     }],
@@ -47,6 +48,7 @@ const cases = [
             sumUs: 0,
             minimumUs: null,
             maximumUs: null,
+            recentViolationUs: null,
             buckets: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         }, 'empty summary');
     }],

@@ -74,13 +74,16 @@ async function settle() {
 const clock = new FakeClock();
 const oneShotRunner = new FakeOneShotRunner();
 const changes = [];
+const events = [];
 const added = [];
 const removed = [];
 const runtime = new RuntimeManager({
     clock,
     oneShotRunner,
     streamRunner: new FakeStreamRunner(),
-    onChanges: (source, change, kind) => changes.push([source.id, change, kind]),
+    onChanges: (source, change, kind, _presentation, cycleId) =>
+        changes.push([source.id, change, kind, cycleId]),
+    onEvent: event => events.push(event),
     onPluginAdded: source => added.push(source.id),
     onPluginRemoved: source => removed.push(source.id),
 });
@@ -100,12 +103,19 @@ runtime.refreshOnOpen('fixture');
 await settle();
 if (changes.length !== 1 || runtime.snapshot().plugins[0].rawNoOps !== 1)
     throw new Error('Runtime did not suppress identical one-shot output');
+if (runtime.snapshot().plugins[0].lastCycleId !== 2)
+    throw new Error('Raw no-op did not receive an accepted-snapshot cycle ID');
 
 oneShotRunner.outputs.push(raw('ok', true));
 runtime.refreshOnOpen('fixture');
 await settle();
 if (changes.length !== 1 || runtime.snapshot().plugins[0].semanticNoOps !== 1)
     throw new Error('Runtime did not suppress a semantic no-op');
+if (runtime.snapshot().plugins[0].lastCycleId !== 3)
+    throw new Error('Semantic no-op did not receive an accepted-snapshot cycle ID');
+const acceptedEvents = events.filter(event => event.kind === 'snapshot-accepted');
+if (JSON.stringify(acceptedEvents.map(event => event.cycleId)) !== '[1,2,3]')
+    throw new Error('Accepted snapshot cycle IDs are not monotonically increasing');
 
 const invalid = new Error('fixture failed');
 invalid.kind = 'fixture';

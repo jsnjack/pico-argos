@@ -54,6 +54,10 @@ ticks. The default `summary` diagnostics mode records bounded histograms and
 mutation counters. Transient traces use a fixed 16,384-slot ring, bounded idle
 serialization, asynchronous export below the XDG cache directory, and the
 versioned D-Bus interface shown above.
+Run IDs, stream sequence IDs, child/pipe/decode timings, message and byte
+counters, restart/backoff state, output rejections, UI queue/apply phases, and
+mutation-armed stage events are correlated without exporting plugin output or
+environment values.
 
 The preferences window exposes the persistent diagnostics mode, on-demand
 plugin health, bounded phase percentiles, actor mutation totals, and trace

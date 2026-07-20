@@ -9,7 +9,11 @@ import {StreamRunError, StreamRunner} from './stream-runner.js';
 const fixture = GLib.canonicalize_filename(
     'tests/fixtures/stream-fixture.js',
     GLib.get_current_dir());
-const runner = new StreamRunner({clock: new MonotonicClock()});
+const events = [];
+const runner = new StreamRunner({
+    clock: new MonotonicClock(),
+    onEvent: event => events.push(event),
+});
 
 function manifest(mode, overrides = {}) {
     return {
@@ -47,6 +51,12 @@ await expectFailure('messages', 'stdout-eof', {}, {
 });
 if (JSON.stringify(kinds) !== JSON.stringify(['snapshot', 'heartbeat']))
     throw new Error(`Runner did not parse complete stream messages: ${JSON.stringify(kinds)}`);
+const messageRunIds = new Set(events
+    .filter(event => event.kind === 'stream-line-complete')
+    .map(event => event.runId));
+if (messageRunIds.size !== 1 ||
+    !events.some(event => event.kind === 'stream-heartbeat'))
+    throw new Error('Stream messages did not retain run and sequence correlation');
 
 let splitText = null;
 await expectFailure('split-utf8', 'stdout-eof', {}, {
@@ -68,7 +78,8 @@ await expectFailure('heartbeat-timeout', 'heartbeat-timeout', {
     heartbeatTimeoutMs: 200,
 });
 const stderrFlood = await expectFailure('stderr-flood', 'stderr-rate');
-if (stderrFlood.stderr.length !== 8 * 1_024)
+if (stderrFlood.stderr.length !== 8 * 1_024 ||
+    stderrFlood.details.stderrBytes <= 8 * 1_024)
     throw new Error('Runner did not retain the bounded stream stderr tail');
 
 const cancellation = runner.run(manifest('cancel', {id: 'cancel-stream'}));

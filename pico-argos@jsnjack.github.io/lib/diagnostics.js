@@ -53,7 +53,8 @@ export const MUTATION_NAMES = Object.freeze([
 
 /** Stores a bounded summary for one duration metric. */
 export class DurationHistogram {
-    constructor() {
+    constructor(violationThresholdUs = 1_000) {
+        this.violationThresholdUs = violationThresholdUs;
         this.reset();
     }
 
@@ -63,6 +64,7 @@ export class DurationHistogram {
         this.sumUs = 0;
         this.minimumUs = null;
         this.maximumUs = null;
+        this.recentViolationUs = null;
         this._buckets = this._buckets ?? new Uint32Array(DURATION_BUCKETS_US.length);
         this._buckets.fill(0);
     }
@@ -80,6 +82,8 @@ export class DurationHistogram {
         this.maximumUs = this.maximumUs === null
             ? durationUs
             : Math.max(this.maximumUs, durationUs);
+        if (durationUs > this.violationThresholdUs)
+            this.recentViolationUs = durationUs;
 
         const index = DURATION_BUCKETS_US.findIndex(bound => durationUs <= bound);
         this._buckets[index]++;
@@ -92,6 +96,7 @@ export class DurationHistogram {
             sumUs: this.sumUs,
             minimumUs: this.minimumUs,
             maximumUs: this.maximumUs,
+            recentViolationUs: this.recentViolationUs,
             buckets: Array.from(this._buckets),
         };
     }
@@ -101,7 +106,8 @@ export class DurationHistogram {
 export class Diagnostics {
     constructor(mode = DIAGNOSTICS_MODES.SUMMARY) {
         this._phases = Object.fromEntries(
-            HARNESS_PHASES.map(name => [name, new DurationHistogram()]));
+            HARNESS_PHASES.map(name => [name, new DurationHistogram(
+                phaseViolationThreshold(name))]));
         this._mutations = Object.fromEntries(
             MUTATION_NAMES.map(name => [name, 0]));
         this._failures = {spawn: 0};
@@ -121,7 +127,7 @@ export class Diagnostics {
         this.mode = mode;
     }
 
-    /** Returns the next monotonically increasing visible-change identifier. */
+    /** Returns the next monotonically increasing accepted-snapshot identifier. */
     nextCycleId() {
         this._cycleId++;
         return this._cycleId;
@@ -235,4 +241,14 @@ export class Diagnostics {
                 },
         };
     }
+}
+
+function phaseViolationThreshold(name) {
+    if (name === 'parse-validate-diff')
+        return 500;
+    if (name === 'menu-build')
+        return 8_000;
+    if (name === 'spawn-call' || name === 'child-wall' || name === 'pipe-drain')
+        return Number.POSITIVE_INFINITY;
+    return 1_000;
 }

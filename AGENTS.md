@@ -77,6 +77,9 @@ The current Phase 0 flow is:
     production diagnostic interface with generation-guarded teardown.
 15. `prefs.js` reads the live bounded summary only while its Diagnostics page
     is visible and exposes summary mode, trace, export/stop, and reset controls.
+16. Runner events share monotonically increasing run IDs, stream messages carry
+    per-run sequence IDs, and trace events correlate launch, framing, state,
+    UI queue/apply, and mutation-armed stage timing without retaining output.
 
 The production universal runtime flow is:
 

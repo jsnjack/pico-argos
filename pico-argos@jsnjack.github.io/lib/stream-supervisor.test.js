@@ -84,7 +84,10 @@ const supervisor = new StreamSupervisor({
     clock: new FakeClock(),
     runner,
     timer,
-    onMessage: (source, raw) => messages.push([source.id, raw]),
+    onMessage: (source, raw, context) => {
+        messages.push([source.id, raw, context]);
+        return context;
+    },
 });
 for (let index = 0; index < 5; index++)
     supervisor.setPlugin(plugin(`stream-${index}`, index));
@@ -98,8 +101,13 @@ if (supervisor.snapshot().active !== 4 ||
     supervisor.snapshot().plugins.find(state => state.id === 'stream-4').admitted)
     throw new Error('Supervisor did not enforce the four-stream limit');
 
-runner.active.get('stream-0').callbacks.onMessage('snapshot', {kind: 'snapshot'});
-if (JSON.stringify(messages) !== JSON.stringify([['stream-0', 'snapshot']]))
+const messageContext = {runId: 7, sequence: 3, kind: 'snapshot'};
+const returnedContext = runner.active.get('stream-0').callbacks.onMessage(
+    'snapshot', messageContext);
+if (returnedContext !== messageContext || messages[0][2] !== messageContext)
+    throw new Error('Stream supervisor dropped message correlation context');
+if (JSON.stringify(messages) !==
+    JSON.stringify([['stream-0', 'snapshot', messageContext]]))
     throw new Error('Supervisor did not forward a current stream message');
 runner.active.get('stream-0').reject({kind: 'fixture'});
 runner.active.delete('stream-0');

@@ -99,6 +99,10 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
         page.add(this._healthGroup);
         this._phaseGroup = new Adw.PreferencesGroup({title: 'Synchronous phases'});
         page.add(this._phaseGroup);
+        this._mutationGroup = new Adw.PreferencesGroup({title: 'Actor mutations'});
+        this._mutationRow = new Adw.ActionRow({title: 'Bounded mutation counters'});
+        this._mutationGroup.add(this._mutationRow);
+        page.add(this._mutationGroup);
         return page;
     }
 
@@ -125,6 +129,8 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
         this._requestPending = true;
         this._call('GetSummary', null, result => {
             this._requestPending = false;
+            if (this._window === null)
+                return;
             if (result === null) {
                 this._replaceRows(this._healthGroup, this._healthRows, []);
                 this._healthRows = [];
@@ -157,6 +163,9 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
             }));
         this._replaceRows(this._phaseGroup, this._phaseRows, phaseRows);
         this._phaseRows = phaseRows;
+        this._mutationRow.subtitle = Object.entries(summary.diagnostics.mutations)
+            .map(([name, count]) => `${name} ${count}`)
+            .join(' · ');
     }
 
     _replaceRows(group, current, next) {
@@ -220,7 +229,19 @@ function healthSubtitle(plugin) {
     return `${plugin.mode} · ${plugin.processState} · ${success} · ${failure} · ` +
         `${plugin.accepted} accepted, ${plugin.rawNoOps} raw no-op, ` +
         `${plugin.semanticNoOps} semantic no-op, ${plugin.skipped} skipped, ` +
-        `${plugin.restarts} restarts`;
+        `${plugin.restarts} restarts, ${plugin.timeouts} timeouts, ` +
+        `${plugin.outputRejections} rejected · ${plugin.messages} messages, ` +
+        `${plugin.messageRatePerSecond.toFixed(2)} msg/s, ` +
+        `${plugin.stdoutBytes} B stdout, ${plugin.stderrBytes} B stderr, ` +
+        `${plugin.byteRatePerMinute.toFixed(0)} B/min · ` +
+        `${(plugin.noOpRate * 100).toFixed(1)}% no-op · ` +
+        `last child ${formatDurationUs(plugin.lastChildRuntimeUs)}, ` +
+        `uptime ${formatDurationUs(plugin.streamUptimeUs)}, ` +
+        `heartbeat age ${formatDurationUs(plugin.heartbeatAgeUs)}, ` +
+        `backoff ${plugin.currentBackoffMs === null ? 'none' : `${plugin.currentBackoffMs} ms`} · ` +
+        `nice ${plugin.niceRequested === null
+            ? 'disabled'
+            : plugin.niceApplied === false ? 'unavailable' : plugin.niceRequested}`;
 }
 
 function phaseSubtitle(phase) {

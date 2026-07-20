@@ -22,13 +22,14 @@ export class RenderCoordinator {
     }
 
     /** Queues only the latest complete presentation for one plugin. */
-    queue(plugin, presentation) {
+    queue(plugin, presentation, cycleId = 0) {
         if (!this._enabled)
             return;
         const previous = this._pending.get(plugin.id);
         this._pending.set(plugin.id, {
             plugin,
             presentation,
+            cycleId,
             queuedUs: previous?.queuedUs ?? this._clock.nowUs(),
         });
         this._arm();
@@ -70,8 +71,10 @@ export class RenderCoordinator {
         this._pending = new Map();
         let writes = 0;
         let earliestQueuedUs = applyBeginUs;
+        let cycleId = 0;
         for (const entry of pending.values()) {
             earliestQueuedUs = Math.min(earliestQueuedUs, entry.queuedUs);
+            cycleId = Math.max(cycleId, entry.cycleId);
             writes += this._apply(entry.plugin, entry.presentation) ?? 0;
         }
         const applyEndUs = this._clock.nowUs();
@@ -82,6 +85,7 @@ export class RenderCoordinator {
             queueWaitUs: applyBeginUs - earliestQueuedUs,
             pluginCount: pending.size,
             writes,
+            cycleId,
         });
         this._arm();
     }

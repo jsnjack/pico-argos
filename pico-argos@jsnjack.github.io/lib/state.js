@@ -67,6 +67,7 @@ export class StateStore {
     /** Raw-compares, parses once, and accepts a snapshot or stream heartbeat. */
     acceptProtocol(pluginId, raw, options = {}) {
         const previous = this._entries.get(pluginId);
+        options.observe?.('raw-compare-end');
         if (previous?.raw === raw && !previous.failureActive && !previous.stale) {
             return {
                 message: {kind: 'snapshot', snapshot: previous.validSnapshot},
@@ -78,11 +79,20 @@ export class StateStore {
             };
         }
 
-        const {validateSnapshot = null, ...parserOptions} = options;
+        const {
+            validateSnapshot = null,
+            observe = null,
+            ...parserOptions
+        } = options;
+        observe?.('parse-begin');
         const message = this._parser(raw, parserOptions);
-        if (message.kind === 'heartbeat')
+        observe?.('parse-end');
+        if (message.kind === 'heartbeat') {
+            observe?.('validate-end');
             return {message, state: null};
+        }
         validateSnapshot?.(message.snapshot);
+        observe?.('validate-end');
 
         const snapshot = message.snapshot;
         const changes = previous === undefined
@@ -97,6 +107,7 @@ export class StateStore {
             failureActive: false,
             stale: false,
         });
+        observe?.('semantic-diff-end');
 
         if (changes === null) {
             return {
