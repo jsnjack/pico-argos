@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="pico-argos">
+  <schema id="org.gnome.shell.extensions.pico-argos"
+          path="/org/gnome/shell/extensions/pico-argos/">
+    <key name="diagnostics-mode" type="s">
+      <choices>
+        <choice value="summary"/>
+        <choice value="off"/>
+      </choices>
+      <default>'summary'</default>
+      <summary>Diagnostics mode</summary>
+      <description>Collect bounded summary diagnostics or errors only.</description>
+    </key>
+  </schema>
+</schemalist>

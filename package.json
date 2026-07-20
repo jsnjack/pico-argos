@@ -1,0 +1,12 @@
+{
+  "name": "pico-argos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint pico-argos@jsnjack.github.io"
+  },
+  "devDependencies": {
+    "eslint": "9.39.2"
+  }
+}

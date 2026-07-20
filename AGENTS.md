@@ -13,21 +13,25 @@ It renders bounded structured output from user-installed executable plugins.
 The core knows only plugin manifests, process lifecycle, protocol validation,
 semantic state, rendering, and diagnostics; domain integrations remain plugins.
 
-The current repository is in the specification phase. Treat `SPEC.md` as the
-normative product and technical contract until source code and tests exist.
+The repository is implementing the Phase 0 performance harness. Treat
+`SPEC.md` as the normative product and technical contract.
 
 ---
 
 ## Architecture
 
 ```text
-SPEC.md                    Normative behavior, protocol, limits, and delivery gates
-AGENTS.universal.md        Shared engineering conventions
-AGENTS.gjs.md              GNOME Shell and GJS conventions
-Makefile                   Single validation and future packaging entry point
-pico-argos@jsnjack.github.io/   Future installable extension source only
-plugins/                   Future reference plugins, outside the extension artifact
-tests/                     Future integration and performance fixtures
+SPEC.md                         Normative behavior, protocol, limits, and delivery gates
+AGENTS.universal.md             Shared engineering conventions
+AGENTS.gjs.md                   GNOME Shell and GJS conventions
+Makefile                        Validation, staging, packaging, and installation
+package.json                    Pinned project development tooling
+pico-argos@jsnjack.github.io/   Installable GNOME Shell 50 extension source
+  extension.js                  Lifecycle wiring for the Phase 0 harness
+  lib/                          Clock, diagnostics, state, rendering, and harness logic
+  schemas/                      Extension GSettings schema
+plugins/                        Future reference plugins, outside the extension artifact
+tests/                          Future integration and performance fixtures
 ```
 
 The installable extension package must not contain reference plugins. Core and
@@ -36,6 +40,22 @@ plugins communicate exclusively through the public versioned protocol.
 ---
 
 ## Key Flows
+
+The current Phase 0 flow is:
+
+1. `PerformanceController` owns the enabled generation, timer, and synthetic
+   child process.
+2. `SyntheticOutput` produces constant or fixed-width changing values.
+3. `DistinctText` rejects semantic no-ops before the persistent label is
+   written.
+4. `Diagnostics` records bounded mutation counts and monotonic duration
+   histograms unless collection is off.
+5. A transient trace stores numeric events in a fixed ring and `StageTrace`
+   arms feature-detected stage signals only after a visible label write.
+6. `DiagnosticService` exposes bounded summary and transient trace controls on
+   the versioned session D-Bus interface.
+
+The planned universal runtime flow remains:
 
 1. `PluginRegistry` asynchronously discovers and validates plugin manifests.
 2. `RuntimeManager` schedules a bounded one-shot process or supervises a
@@ -50,6 +70,7 @@ plugins communicate exclusively through the public versioned protocol.
 ## Build & Run
 
 ```bash
+npm install      # install pinned project development tooling
 make check       # complete non-installing validation gate
 make test        # GJS unit tests once tests exist
 make package     # build the extension zip once source exists
@@ -104,7 +125,8 @@ does not belong in that schema.
 
 ## Known Issues
 
-- No implementation exists yet; the repository currently contains the approved
-  technical direction and project standards only.
+- Phase 0 trace export and target-hardware A/B capture are not implemented yet.
+- Plugin discovery, subprocess protocol runners, semantic plugin state, and
+  production rendering begin only after the Phase 0 performance gate passes.
 - Distribution through extensions.gnome.org is not assumed because arbitrary
   executable plugin support may conflict with review policy.

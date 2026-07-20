@@ -4,8 +4,9 @@ UUID := pico-argos@jsnjack.github.io
 SRC_DIR := $(UUID)
 BUILD_DIR := build
 DIST_DIR := dist
+ESLINT := node_modules/.bin/eslint
 SCHEMAS := $(wildcard $(SRC_DIR)/schemas/*.gschema.xml)
-SCHEMA_ARGS := $(foreach schema,$(SCHEMAS),--schema=$(schema))
+PACKAGE := $(DIST_DIR)/$(UUID).shell-extension.zip
 
 .PHONY: check spec-check format-check lint test schemas package package-check install standards clean
 
@@ -25,11 +26,11 @@ format-check:
 
 lint:
 	@if [[ -f "$(SRC_DIR)/extension.js" ]]; then \
-		command -v eslint >/dev/null 2>&1 || { \
-			echo "eslint is not installed. Install the project development dependencies."; \
+		[[ -x "$(ESLINT)" ]] || { \
+			echo "Project development dependencies are missing. Install them with: npm install"; \
 			exit 1; \
 		}; \
-		eslint "$(SRC_DIR)" $(wildcard plugins tests); \
+		"$(ESLINT)" "$(SRC_DIR)" $(wildcard plugins tests); \
 	else \
 		echo "==> lint: extension source not present yet"; \
 	fi
@@ -43,21 +44,33 @@ test:
 	fi
 
 schemas:
-	@mkdir -p "$(BUILD_DIR)/$(UUID)"
+	@rm -rf "$(BUILD_DIR)/$(UUID)"
+	@mkdir -p "$(BUILD_DIR)/$(UUID)/lib" "$(BUILD_DIR)/$(UUID)/schemas"
+	@cp "$(SRC_DIR)"/*.js "$(SRC_DIR)"/*.json "$(SRC_DIR)"/*.css "$(BUILD_DIR)/$(UUID)/"
+	@find "$(SRC_DIR)/lib" -maxdepth 1 -type f -name '*.js' -not -name '*.test.js' \
+		-exec cp {} "$(BUILD_DIR)/$(UUID)/lib/" \;
 	@if compgen -G "$(SRC_DIR)/schemas/*.gschema.xml" >/dev/null; then \
-		cp "$(SRC_DIR)"/schemas/*.gschema.xml "$(BUILD_DIR)/$(UUID)/"; \
-		glib-compile-schemas --strict "$(BUILD_DIR)/$(UUID)"; \
+		cp "$(SRC_DIR)"/schemas/*.gschema.xml "$(BUILD_DIR)/$(UUID)/schemas/"; \
+		glib-compile-schemas --strict "$(BUILD_DIR)/$(UUID)/schemas"; \
 	else \
 		echo "==> schemas: no schemas yet"; \
 	fi
 
 package-check:
-	@if [[ -f "$(SRC_DIR)/metadata.json" ]]; then $(MAKE) package; \
+	@if [[ -f "$(SRC_DIR)/metadata.json" ]]; then \
+		set -e; \
+		$(MAKE) package; \
+		test -s "$(BUILD_DIR)/$(UUID)/schemas/gschemas.compiled"; \
+		unzip -Z1 "$(PACKAGE)" | rg -q '^lib/performance-controller\.js$$'; \
+		unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/org\.gnome\.shell\.extensions\.pico-argos\.gschema\.xml$$'; \
+		! unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/gschemas\.compiled$$'; \
+		! unzip -Z1 "$(PACKAGE)" | rg -q '\.test\.js$$'; \
 	else echo "==> package: extension source not present yet"; fi
 
 package: schemas
 	@mkdir -p "$(DIST_DIR)"
-	@gnome-extensions pack --force --out-dir="$(DIST_DIR)" $(SCHEMA_ARGS) "$(SRC_DIR)"
+	@gnome-extensions pack --force --out-dir="$(DIST_DIR)" \
+		--extra-source=lib --extra-source=schemas "$(BUILD_DIR)/$(UUID)"
 
 install: package
 	@gnome-extensions install --force "$(DIST_DIR)/$(UUID).shell-extension.zip"
