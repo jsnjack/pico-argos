@@ -64,6 +64,9 @@ The current Phase 0 flow is:
 10. `OneShotScheduler` deterministically phases deadlines, coalesces bounded
     work, and serializes dispatch to `OneShotRunner`, which concurrently drains,
     limits, terminates, and reaps each direct child.
+11. `StreamRunner` incrementally frames UTF-8 lines and enforces liveness and
+    token buckets; `StreamSupervisor` serializes at most four child starts and
+    applies bounded exponential restart and lockout policy.
 
 The planned universal runtime flow remains:
 
@@ -136,7 +139,6 @@ does not belong in that schema.
 ## Known Issues
 
 - Phase 0 target-hardware A/B capture has not been run yet.
-- Stream supervision, runtime integration, and production rendering are still
-  under construction.
+- Runtime integration and production rendering are still under construction.
 - Distribution through extensions.gnome.org is not assumed because arbitrary
   executable plugin support may conflict with review policy.

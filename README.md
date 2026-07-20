@@ -52,6 +52,9 @@ edited replacement is invalid. The one-shot scheduler uses one monotonic timer,
 coalesces a single token per plugin, prioritizes menu refreshes, and dispatches
 at most one child globally. Its runner drains both pipes asynchronously,
 enforces byte and timeout limits, validates UTF-8, and reaps every direct child.
+The stream path preserves UTF-8 sequences across reads, frames bounded lines,
+enforces message/stdout/stderr rates and liveness, serializes starts, admits at
+most four children, and locks persistent crash loops after bounded backoff.
 
 CPU, memory, disk, network, GitHub, VPN, and weather behavior will be reference
 plugins, not features embedded in the extension runtime.
