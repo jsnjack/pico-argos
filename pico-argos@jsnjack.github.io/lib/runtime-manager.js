@@ -23,6 +23,7 @@ export class RuntimeManager {
         onPluginRemoved = null,
         onHealth = null,
         onEvent = null,
+        onPhase = null,
     }) {
         if (typeof clock?.nowUs !== 'function')
             throw new TypeError('RuntimeManager requires a monotonic clock');
@@ -36,8 +37,9 @@ export class RuntimeManager {
         this._onPluginRemoved = onPluginRemoved;
         this._onHealth = onHealth;
         this._onEvent = onEvent;
-        this._oneShotRunner = oneShotRunner ?? new OneShotRunner({clock});
-        this._streamRunner = streamRunner ?? new StreamRunner({clock});
+        this._onPhase = onPhase;
+        this._oneShotRunner = oneShotRunner ?? new OneShotRunner({clock, onPhase});
+        this._streamRunner = streamRunner ?? new StreamRunner({clock, onPhase});
         this._oneShotScheduler = new OneShotScheduler({
             clock,
             run: (manifest, request) => this._runOneShot(manifest, request),
@@ -78,6 +80,7 @@ export class RuntimeManager {
             this._onPluginAdded?.(plugin);
         else
             this._onPluginChanged?.(plugin, previous);
+        this._updateStaleTimer();
         this._publishHealth(plugin.id);
     }
 
@@ -96,6 +99,7 @@ export class RuntimeManager {
         this._health.delete(pluginId);
         this._state.remove(pluginId);
         this._onPluginRemoved?.(plugin);
+        this._updateStaleTimer();
     }
 
     /** Starts scheduling, supervision, and coarse staleness checks. */
@@ -106,13 +110,7 @@ export class RuntimeManager {
         this._generation++;
         this._oneShotScheduler.start();
         this._streamSupervisor.start();
-        this._staleSourceId = GLib.timeout_add(
-            GLib.PRIORITY_DEFAULT,
-            STALE_TICK_MS,
-            () => {
-                this.tickStaleness();
-                return GLib.SOURCE_CONTINUE;
-            });
+        this._updateStaleTimer();
     }
 
     /** Deterministically prevents work and terminates owned direct children. */
@@ -185,19 +183,37 @@ export class RuntimeManager {
     _acceptStream(plugin, raw) {
         if (this._plugins.get(plugin.id) !== plugin)
             return {kind: 'heartbeat'};
-        const processed = this._state.acceptProtocol(plugin.id, raw, {
-            allowHeartbeat: true,
-            validateSnapshot: snapshot => validateReservedText(plugin, snapshot),
-        });
+        const startedUs = this._clock.nowUs();
+        let processed;
+        try {
+            processed = this._state.acceptProtocol(plugin.id, raw, {
+                allowHeartbeat: true,
+                validateSnapshot: snapshot => validateReservedText(plugin, snapshot),
+            });
+        } finally {
+            this._onPhase?.(
+                'parse-validate-diff',
+                this._clock.nowUs() - startedUs,
+                plugin.id);
+        }
         if (processed.message.kind === 'snapshot')
             this._acceptProcessed(plugin, processed.state);
         return processed.message;
     }
 
     _acceptSnapshot(plugin, raw) {
-        const processed = this._state.acceptProtocol(plugin.id, raw, {
-            validateSnapshot: snapshot => validateReservedText(plugin, snapshot),
-        });
+        const startedUs = this._clock.nowUs();
+        let processed;
+        try {
+            processed = this._state.acceptProtocol(plugin.id, raw, {
+                validateSnapshot: snapshot => validateReservedText(plugin, snapshot),
+            });
+        } finally {
+            this._onPhase?.(
+                'parse-validate-diff',
+                this._clock.nowUs() - startedUs,
+                plugin.id);
+        }
         this._acceptProcessed(plugin, processed.state);
     }
 
@@ -265,8 +281,13 @@ export class RuntimeManager {
     }
 
     _publishChanges(plugin, result) {
-        if (result?.changes !== null && result?.changes !== undefined)
-            this._onChanges?.(plugin, result.changes, result.kind);
+        if (result?.changes !== null && result?.changes !== undefined) {
+            this._onChanges?.(
+                plugin,
+                result.changes,
+                result.kind,
+                this._state.getPresentation(plugin.id));
+        }
     }
 
     _publishHealth(pluginId) {
@@ -279,6 +300,23 @@ export class RuntimeManager {
         return this._started &&
             generation === this._generation &&
             this._plugins.get(plugin.id) === plugin;
+    }
+
+    _updateStaleTimer() {
+        const needed = this._started && [...this._plugins.values()].some(plugin =>
+            plugin.manifest.maxStaleMs !== null);
+        if (!needed && this._staleSourceId !== 0) {
+            GLib.source_remove(this._staleSourceId);
+            this._staleSourceId = 0;
+        } else if (needed && this._staleSourceId === 0) {
+            this._staleSourceId = GLib.timeout_add(
+                GLib.PRIORITY_DEFAULT,
+                STALE_TICK_MS,
+                () => {
+                    this.tickStaleness();
+                    return GLib.SOURCE_CONTINUE;
+                });
+        }
     }
 }
 

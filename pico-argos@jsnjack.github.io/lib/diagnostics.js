@@ -25,18 +25,30 @@ export const DURATION_BUCKETS_US = Object.freeze([
 
 /** Phase names recorded by the performance harness. */
 export const HARNESS_PHASES = Object.freeze([
+    'child-wall',
+    'decode',
     'get-summary',
+    'menu-build',
+    'parse-validate-diff',
+    'pipe-drain',
     'scheduler-callback',
+    'scheduler-lateness',
     'spawn-call',
     'trace-serialize',
     'ui-apply',
+    'ui-queue-wait',
 ]);
 
 /** Mutation names recorded by the performance harness. */
 export const MUTATION_NAMES = Object.freeze([
     'actor-creations',
     'actor-destructions',
+    'accessible-name-writes',
+    'icon-name-writes',
     'label-text-writes',
+    'menu-property-writes',
+    'style-class-writes',
+    'visibility-writes',
 ]);
 
 /** Stores a bounded summary for one duration metric. */

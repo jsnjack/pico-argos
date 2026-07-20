@@ -117,6 +117,17 @@ export class StateStore {
         return this._entries.get(pluginId)?.effectiveSnapshot ?? null;
     }
 
+    /** Returns the complete latest model consumed by the coalescing renderer. */
+    getPresentation(pluginId) {
+        const entry = this._entries.get(pluginId);
+        if (entry === undefined)
+            return null;
+        return Object.freeze({
+            snapshot: entry.effectiveSnapshot,
+            stale: entry.stale,
+        });
+    }
+
     /** Applies one failure policy without discarding the last valid state. */
     applyFailure(pluginId, policy) {
         let entry = this._entries.get(pluginId);
