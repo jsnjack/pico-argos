@@ -1,0 +1,16 @@
+{
+  "manifestVersion": 1,
+  "id": "weather",
+  "mode": "oneshot",
+  "command": ["gjs", "-m", "./run.js"],
+  "intervalMs": 300000,
+  "timeoutMs": 20000,
+  "refreshOnOpen": true,
+  "position": "center",
+  "order": 40,
+  "nice": 10,
+  "reserveTextChars": 9,
+  "passEnvironment": ["WEATHER_LATITUDE", "WEATHER_LONGITUDE", "WEATHER_LOCATION"],
+  "failurePolicy": "keep-last",
+  "maxStaleMs": 600000
+}

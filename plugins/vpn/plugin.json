@@ -1,0 +1,16 @@
+{
+  "manifestVersion": 1,
+  "id": "vpn",
+  "mode": "oneshot",
+  "command": ["gjs", "-m", "./run.js"],
+  "intervalMs": 5000,
+  "timeoutMs": 4000,
+  "refreshOnOpen": false,
+  "position": "right",
+  "order": 30,
+  "nice": 10,
+  "reserveTextChars": 0,
+  "passEnvironment": ["VPN_STATUS_URL"],
+  "failurePolicy": "keep-last",
+  "maxStaleMs": 30000
+}
