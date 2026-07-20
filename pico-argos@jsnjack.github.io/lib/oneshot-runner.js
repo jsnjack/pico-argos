@@ -3,6 +3,8 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
+import {buildPluginEnvironment} from './process-environment.js';
+
 const READ_BYTES = 8 * 1_024;
 const MAX_STDOUT_BYTES = 64 * 1_024;
 const MAX_STDERR_BYTES = 8 * 1_024;
@@ -43,7 +45,7 @@ export class OneShotRunner {
         const launcher = new Gio.SubprocessLauncher({
             flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
         });
-        launcher.set_environ(buildEnvironment(manifest, menuOpen));
+        launcher.set_environ(buildPluginEnvironment(manifest, menuOpen));
         launcher.set_cwd(workingDirectory ?? GLib.path_get_dirname(manifest.command[0]));
 
         const launchBeginUs = this._clock.nowUs();
@@ -194,33 +196,6 @@ export class OneShotRunner {
                 return GLib.SOURCE_REMOVE;
             });
     }
-}
-
-function buildEnvironment(manifest, menuOpen) {
-    const values = new Map([
-        ['HOME', GLib.get_home_dir()],
-        ['PATH', GLib.getenv('PATH') ?? '/usr/local/bin:/usr/bin:/bin'],
-        ['LANG', GLib.getenv('LANG') ?? 'C.UTF-8'],
-        ['LC_ALL', GLib.getenv('LC_ALL') ?? ''],
-        ['XDG_CONFIG_HOME', GLib.get_user_config_dir()],
-        ['XDG_CACHE_HOME', GLib.get_user_cache_dir()],
-        ['XDG_DATA_HOME', GLib.get_user_data_dir()],
-        ['XDG_STATE_HOME', GLib.getenv('XDG_STATE_HOME') ?? GLib.build_filenamev([
-            GLib.get_home_dir(),
-            '.local',
-            'state',
-        ])],
-        ['XDG_RUNTIME_DIR', GLib.get_user_runtime_dir() ?? ''],
-        ['PICO_ARGOS_PROTOCOL', '1'],
-        ['PICO_ARGOS_MENU_OPEN', menuOpen ? 'true' : 'false'],
-        ['PICO_ARGOS_PLUGIN_ID', manifest.id],
-    ]);
-    for (const name of manifest.passEnvironment) {
-        const value = GLib.getenv(name);
-        if (value !== null)
-            values.set(name, value);
-    }
-    return [...values].map(([name, value]) => `${name}=${value}`);
 }
 
 function drainBounded(stream, maximumBytes, cancellable, onOverflow) {
