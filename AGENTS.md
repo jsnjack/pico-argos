@@ -28,8 +28,8 @@ AGENTS.gjs.md                   GNOME Shell and GJS conventions
 Makefile                        Validation, staging, packaging, and installation
 package.json                    Pinned project development tooling
 pico-argos@jsnjack.github.io/   Installable GNOME Shell 50 extension source
-  extension.js                  Lifecycle wiring for the Phase 0 harness
-  lib/                          Diagnostics, validation, registry, state, and harness logic
+  extension.js                  Production lifecycle entry point
+  lib/                          Diagnostics, runtime, state, and persistent rendering
   schemas/                      Extension GSettings schema
 plugins/                        Future reference plugins, outside the extension artifact
 tests/                          Future integration and performance fixtures
@@ -70,8 +70,13 @@ The current Phase 0 flow is:
 12. `RuntimeManager` joins both execution modes to `StateStore`, publishes only
     minimal changes, applies failure/staleness transitions, and rejects panel
     text that exceeds a manifest's reserved allocation.
+13. `RenderCoordinator` collapses each plugin to its latest presentation and
+    caps global batches at 10/s; `PluginIndicator` retains panel leaves and
+    creates keyed menu actors only on first open.
+14. `ExtensionController` wires the monitored registry, runtimes, renderer, and
+    production diagnostic interface with generation-guarded teardown.
 
-The planned universal runtime flow remains:
+The production universal runtime flow is:
 
 1. `PluginRegistry` asynchronously discovers and validates plugin manifests.
 2. `RuntimeManager` schedules a bounded one-shot process or supervises a
@@ -142,6 +147,6 @@ does not belong in that schema.
 ## Known Issues
 
 - Phase 0 target-hardware A/B capture has not been run yet.
-- Production rendering and the reference plugins are still under construction.
+- Reference plugins and the preferences UI are still under construction.
 - Distribution through extensions.gnome.org is not assumed because arbitrary
   executable plugin support may conflict with review policy.

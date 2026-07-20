@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "id": "smoke",
+  "mode": "stream",
+  "command": ["./run"],
+  "startupTimeoutMs": 2000,
+  "heartbeatTimeoutMs": 5000,
+  "maxMessagesPerSecond": 2,
+  "maxBytesPerMinute": 65536,
+  "position": "right",
+  "order": 10,
+  "nice": null,
+  "reserveTextChars": 5,
+  "passEnvironment": [],
+  "failurePolicy": "show-error",
+  "maxStaleMs": 10000
+}

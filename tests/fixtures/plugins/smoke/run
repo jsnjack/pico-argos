@@ -1,0 +1,32 @@
+#!/usr/bin/env -S gjs -m
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import GioUnix from 'gi://GioUnix';
+import GLib from 'gi://GLib';
+
+const output = GioUnix.OutputStream.new(1, false);
+const encoder = new TextEncoder();
+
+function write(value) {
+    output.write_all(encoder.encode(`${JSON.stringify(value)}\n`), null);
+}
+
+write({
+    version: 1,
+    type: 'snapshot',
+    panel: {
+        text: 'smoke',
+        appearance: 'monospace',
+        accessibleName: 'pico-argos smoke fixture',
+    },
+    menu: [
+        {id: 'status', kind: 'label', text: 'Stream fixture is healthy'},
+        {id: 'site', kind: 'link', text: 'Open example', uri: 'https://example.com/'},
+    ],
+});
+
+GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
+    write({version: 1, type: 'heartbeat'});
+    return GLib.SOURCE_CONTINUE;
+});
+new GLib.MainLoop(null, false).run();

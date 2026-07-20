@@ -62,10 +62,11 @@ package-check:
 		set -e; \
 		$(MAKE) package; \
 		test -s "$(BUILD_DIR)/$(UUID)/schemas/gschemas.compiled"; \
-		unzip -Z1 "$(PACKAGE)" | rg -q '^lib/performance-controller\.js$$'; \
+		unzip -Z1 "$(PACKAGE)" | rg -q '^lib/extension-controller\.js$$'; \
 		unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/org\.gnome\.shell\.extensions\.pico-argos\.gschema\.xml$$'; \
 		! unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/gschemas\.compiled$$'; \
 		! unzip -Z1 "$(PACKAGE)" | rg -q '\.test\.js$$'; \
+		! unzip -Z1 "$(PACKAGE)" | rg -q '^plugins/'; \
 	else echo "==> package: extension source not present yet"; fi
 
 package: schemas

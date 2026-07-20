@@ -3,23 +3,15 @@
 `pico-argos` is a performance-first, universal GNOME Shell status extension for
 bounded structured output from executable plugins.
 
-The project is implementing the universal runtime defined in
-[SPEC.md](./SPEC.md) on top of its Phase 0 performance harness. The current
-extension provides one persistent fixed-width panel label and three synthetic
-workloads selected from its menu:
+The production universal runtime defined in [SPEC.md](./SPEC.md) discovers
+strict manifests below `$XDG_CONFIG_HOME/pico-argos/plugins/`, executes bounded
+one-shot or persistent stream plugins, suppresses raw and semantic no-ops, and
+coalesces all visible changes into at most ten UI batches per second.
 
-- `constant` invokes the update path every 250 ms with unchanged text.
-- `changing` applies same-width text changes every 250 ms.
-- `spawn` measures one serialized `/usr/bin/true` launch each second.
-
-The harness records bounded monotonic duration histograms and actor-mutation
-counters in the default `summary` diagnostics mode. The `off` GSettings value
-disables collection for overhead comparisons. Its menu can start or stop a
-30-second detailed trace. Changed label writes arm feature-detected stage hooks
-for at most 100 ms, and events enter a fixed 16,384-slot numeric ring. Trace
-serialization runs in bounded idle slices, writes asynchronously below
-`$XDG_CACHE_HOME/pico-argos/diagnostics/`, and emits `TraceReady` with the
-completed path. The target-system A/B capture remains Phase 0 work.
+Each accepted plugin owns persistent panel icon and label actors. Menu data
+remains plain immutable state until first open; thereafter menu actors are
+retained and updated by stable item ID. Adding, replacing, or removing one
+plugin does not rebuild unrelated indicators.
 
 The enabled extension exposes the versioned diagnostics interface from
 `SPEC.md`. For example:
@@ -36,7 +28,7 @@ gdbus call --session \
   --method org.gnome.Shell.Extensions.PicoArgos.Diagnostics1.StartTrace 30
 ```
 
-The universal runtime will provide two plugin modes after the Phase 0 gate:
+The universal runtime provides two plugin modes:
 
 - `oneshot` runs bounded, low-frequency command or network queries.
 - `stream` supervises one persistent process for frequent or stateful updates
@@ -55,10 +47,13 @@ enforces byte and timeout limits, validates UTF-8, and reaps every direct child.
 The stream path preserves UTF-8 sequences across reads, frames bounded lines,
 enforces message/stdout/stderr rates and liveness, serializes starts, admits at
 most four children, and locks persistent crash loops after bounded backoff.
-Both execution modes now feed one runtime/state path: heartbeats bypass state,
+Both execution modes feed one runtime/state path: heartbeats bypass state,
 identical raw snapshots stop before parsing, semantic no-ops stop before UI
 work, failure policies transition once, and staleness changes only on coarse
-ticks.
+ticks. The default `summary` diagnostics mode records bounded histograms and
+mutation counters. Transient traces use a fixed 16,384-slot ring, bounded idle
+serialization, asynchronous export below the XDG cache directory, and the
+versioned D-Bus interface shown above.
 
 CPU, memory, disk, network, GitHub, VPN, and weather behavior will be reference
 plugins, not features embedded in the extension runtime.
