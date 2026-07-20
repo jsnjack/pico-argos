@@ -13,8 +13,9 @@ It renders bounded structured output from user-installed executable plugins.
 The core knows only plugin manifests, process lifecycle, protocol validation,
 semantic state, rendering, and diagnostics; domain integrations remain plugins.
 
-The repository is implementing the Phase 0 performance harness. Treat
-`SPEC.md` as the normative product and technical contract.
+The repository is implementing the universal runtime on top of the completed
+Phase 0 performance harness. Treat `SPEC.md` as the normative product and
+technical contract.
 
 ---
 
@@ -28,7 +29,7 @@ Makefile                        Validation, staging, packaging, and installation
 package.json                    Pinned project development tooling
 pico-argos@jsnjack.github.io/   Installable GNOME Shell 50 extension source
   extension.js                  Lifecycle wiring for the Phase 0 harness
-  lib/                          Clock, diagnostics, state, rendering, and harness logic
+  lib/                          Diagnostics, validation, registry, state, and harness logic
   schemas/                      Extension GSettings schema
 plugins/                        Future reference plugins, outside the extension artifact
 tests/                          Future integration and performance fixtures
@@ -58,6 +59,8 @@ The current Phase 0 flow is:
    below the XDG cache directory, and announced through `TraceReady`.
 8. `manifest.js`, `protocol.js`, and `state.js` provide the Shell-independent
    version 1 validation and semantic no-op core used by the upcoming runtime.
+9. `PluginRegistry` asynchronously validates owned plugin trees, publishes an
+   ordered initial set, and debounces atomic manifest/executable replacement.
 
 The planned universal runtime flow remains:
 
@@ -130,7 +133,7 @@ does not belong in that schema.
 ## Known Issues
 
 - Phase 0 target-hardware A/B capture has not been run yet.
-- Plugin discovery, subprocess protocol runners, semantic plugin state, and
-  production rendering begin only after the Phase 0 performance gate passes.
+- Subprocess protocol runners, runtime scheduling, and production rendering are
+  still under construction.
 - Distribution through extensions.gnome.org is not assumed because arbitrary
   executable plugin support may conflict with review policy.

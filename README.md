@@ -3,9 +3,10 @@
 `pico-argos` is a performance-first, universal GNOME Shell status extension for
 bounded structured output from executable plugins.
 
-The project is implementing the Phase 0 performance harness defined in
-[SPEC.md](./SPEC.md). The current extension provides one persistent fixed-width
-panel label and three synthetic workloads selected from its menu:
+The project is implementing the universal runtime defined in
+[SPEC.md](./SPEC.md) on top of its Phase 0 performance harness. The current
+extension provides one persistent fixed-width panel label and three synthetic
+workloads selected from its menu:
 
 - `constant` invokes the update path every 250 ms with unchanged text.
 - `changing` applies same-width text changes every 250 ms.
@@ -44,8 +45,11 @@ The universal runtime will provide two plugin modes after the Phase 0 gate:
 The version 1 manifest and output protocol core is implemented as pure GJS.
 It strictly rejects unknown fields, normalizes immutable manifests and
 snapshots, accepts HTTPS links only, suppresses identical raw and semantic
-state, and emits keyed panel/menu change sets. Process discovery and execution
-are the next runtime layer.
+state, and emits keyed panel/menu change sets. The asynchronous registry also
+discovers only owned, non-writable plugin trees, enforces the global plugin
+bound, orders valid manifests, and safely retains the prior definition while an
+edited replacement is invalid. Bounded process execution is the next runtime
+layer.
 
 CPU, memory, disk, network, GitHub, VPN, and weather behavior will be reference
 plugins, not features embedded in the extension runtime.
