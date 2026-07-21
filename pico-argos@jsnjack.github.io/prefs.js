@@ -107,7 +107,7 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
     }
 
     _updateRefreshState() {
-        const visible = this._window.visible_page === this._diagnosticsPage;
+        const visible = this._window.get_visible_page() === this._diagnosticsPage;
         if (visible && this._refreshSourceId === 0) {
             this._refresh();
             this._refreshSourceId = GLib.timeout_add_seconds(
