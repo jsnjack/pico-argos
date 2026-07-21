@@ -25,6 +25,8 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
         this._phaseRows = [];
         this._refreshSourceId = 0;
         this._requestPending = false;
+        this._traceState = 'unavailable';
+        this._lastExportPath = null;
 
         window.add(this._buildGeneralPage());
         this._diagnosticsPage = this._buildDiagnosticsPage();
@@ -66,28 +68,37 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
             icon_name: 'utilities-system-monitor-symbolic',
         });
         const controls = new Adw.PreferencesGroup({title: 'Capture'});
-        const controlRow = new Adw.ActionRow({
-            title: 'Detailed trace',
-            subtitle: 'Exports automatically below the XDG cache directory.',
+        this._traceStatus = new Adw.ActionRow({
+            title: 'Trace status unavailable',
+            subtitle: 'Enable pico-argos to use diagnostic capture.',
         });
-        const buttons = new Gtk.Box({
-            orientation: Gtk.Orientation.HORIZONTAL,
-            spacing: 6,
-            valign: Gtk.Align.CENTER,
+        controls.add(this._traceStatus);
+        const buttons = new Gtk.FlowBox({
+            selection_mode: Gtk.SelectionMode.NONE,
+            homogeneous: true,
+            min_children_per_line: 1,
+            max_children_per_line: 5,
+            column_spacing: 6,
+            row_spacing: 6,
+            margin_top: 6,
+            margin_bottom: 6,
+            margin_start: 12,
+            margin_end: 12,
         });
-        for (const [label, action] of [
-            ['Record 30 s', () => this._startTrace(30)],
-            ['Record 60 s', () => this._startTrace(60)],
-            ['Stop', () => this._call('StopTrace')],
-            ['Export', () => this._call('StopTrace')],
-            ['Reset', () => this._call('ResetSummary')],
+        this._traceButtons = new Map();
+        for (const [id, label, action] of [
+            ['record-30', 'Record 30 s', () => this._startTrace(30)],
+            ['record-60', 'Record 60 s', () => this._startTrace(60)],
+            ['stop', 'Stop', () => this._stopTrace()],
+            ['export', 'Export', () => this._exportTrace()],
+            ['reset', 'Reset', () => this._resetSummary()],
         ]) {
             const button = new Gtk.Button({label});
             button.connect('clicked', action);
-            buttons.append(button);
+            this._traceButtons.set(id, button);
+            buttons.insert(button, -1);
         }
-        controlRow.add_suffix(buttons);
-        controls.add(controlRow);
+        controls.add(buttons);
         page.add(controls);
 
         this._healthGroup = new Adw.PreferencesGroup({title: 'Plugin health'});
@@ -136,6 +147,7 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
                 this._healthRows = [];
                 this._healthStatus.title = 'Extension diagnostics unavailable';
                 this._healthStatus.subtitle = 'Enable pico-argos to inspect live plugin health.';
+                this._renderTraceControl(null);
                 return;
             }
             const [json] = result.deepUnpack();
@@ -148,10 +160,8 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
         this._healthStatus.subtitle = summary.registryErrors.length === 0
             ? 'No manifest or admission errors.'
             : `${summary.registryErrors.length} bounded registry/admission errors.`;
-        const healthRows = summary.runtime.plugins.map(plugin => new Adw.ActionRow({
-            title: plugin.id,
-            subtitle: healthSubtitle(plugin),
-        }));
+        this._renderTraceControl(summary.traceControl ?? null);
+        const healthRows = summary.runtime.plugins.map(healthRow);
         this._replaceRows(this._healthGroup, this._healthRows, healthRows);
         this._healthRows = healthRows;
 
@@ -176,7 +186,68 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
     }
 
     _startTrace(seconds) {
-        this._call('StartTrace', GLib.Variant.new('(u)', [seconds]));
+        this._call(
+            'StartTrace',
+            GLib.Variant.new('(u)', [seconds]),
+            () => this._refresh());
+    }
+
+    _stopTrace() {
+        this._call('StopTrace', null, () => this._refresh());
+    }
+
+    _resetSummary() {
+        this._call('ResetSummary', null, () => this._refresh());
+    }
+
+    _exportTrace() {
+        if (this._traceState === 'recording') {
+            this._stopTrace();
+            return;
+        }
+        if (this._lastExportPath === null)
+            return;
+        const directory = Gio.File.new_for_path(this._lastExportPath).get_parent();
+        if (directory === null)
+            return;
+        try {
+            Gio.AppInfo.launch_default_for_uri(directory.get_uri(), null);
+        } catch (error) {
+            this._traceStatus.title = 'Opening the export folder failed';
+            this._traceStatus.subtitle = `${error.domain ?? 'unknown'}:${error.code ?? 'unknown'}`;
+        }
+    }
+
+    _renderTraceControl(control) {
+        this._traceState = control?.state ?? 'unavailable';
+        this._lastExportPath = control?.lastExportPath ?? null;
+        if (this._traceState === 'recording') {
+            this._traceStatus.title = 'Recording detailed trace';
+            this._traceStatus.subtitle = 'Stop exports the captured trace immediately.';
+        } else if (this._traceState === 'exporting') {
+            this._traceStatus.title = 'Exporting detailed trace';
+            this._traceStatus.subtitle = 'Serialization and file output run in bounded slices.';
+        } else if (control?.lastExportError !== null &&
+            control?.lastExportError !== undefined) {
+            this._traceStatus.title = control.lastExportError;
+            this._traceStatus.subtitle = 'Record another trace to retry the export.';
+        } else if (this._lastExportPath !== null) {
+            this._traceStatus.title = 'Latest trace export';
+            this._traceStatus.subtitle = this._lastExportPath;
+        } else if (this._traceState === 'idle') {
+            this._traceStatus.title = 'Ready to record';
+            this._traceStatus.subtitle = 'Completed traces export automatically to the cache directory.';
+        } else {
+            this._traceStatus.title = 'Trace status unavailable';
+            this._traceStatus.subtitle = 'Enable pico-argos to use diagnostic capture.';
+        }
+        const idle = this._traceState === 'idle';
+        this._traceButtons.get('record-30').sensitive = idle;
+        this._traceButtons.get('record-60').sensitive = idle;
+        this._traceButtons.get('stop').sensitive = this._traceState === 'recording';
+        this._traceButtons.get('export').sensitive =
+            this._traceState === 'recording' || this._lastExportPath !== null;
+        this._traceButtons.get('reset').sensitive = this._traceState !== 'unavailable';
     }
 
     _call(method, parameters = null, callback = null) {
@@ -219,30 +290,72 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
     }
 }
 
-function healthSubtitle(plugin) {
+function healthRow(plugin) {
+    const row = new Adw.ExpanderRow({
+        title: plugin.id,
+        subtitle: healthHeadline(plugin),
+    });
+    row.add_row(new Adw.ActionRow({
+        title: 'Updates',
+        subtitle: `${plugin.accepted} accepted · ${plugin.rawNoOps} raw no-op · ` +
+            `${plugin.semanticNoOps} semantic no-op · ${plugin.skipped} skipped`,
+    }));
+    row.add_row(new Adw.ActionRow({
+        title: 'Execution',
+        subtitle: `${plugin.restarts} restarts · ${plugin.timeouts} timeouts · ` +
+            `${plugin.outputRejections} rejected · last child ` +
+            `${formatDurationUs(plugin.lastChildRuntimeUs)} · ` +
+            `backoff ${plugin.currentBackoffMs === null
+                ? 'none'
+                : `${plugin.currentBackoffMs} ms`}`,
+    }));
+    row.add_row(new Adw.ActionRow({
+        title: 'Throughput',
+        subtitle: `${plugin.messages} messages · ` +
+            `${plugin.messageRatePerSecond.toFixed(2)} msg/s · ` +
+            `${plugin.stdoutBytes} B stdout · ${plugin.stderrBytes} B stderr · ` +
+            `${plugin.byteRatePerMinute.toFixed(0)} B/min · ` +
+            `${(plugin.noOpRate * 100).toFixed(1)}% no-op`,
+    }));
+    row.add_row(new Adw.ActionRow({
+        title: 'Stream and mitigation',
+        subtitle: `uptime ${formatDurationUs(plugin.streamUptimeUs)} · ` +
+            `heartbeat age ${formatDurationUs(plugin.heartbeatAgeUs)} · ` +
+            `nice ${plugin.niceRequested === null
+                ? 'disabled'
+                : plugin.niceApplied === false ? 'unavailable' : plugin.niceRequested}`,
+    }));
+    return row;
+}
+
+function healthHeadline(plugin) {
     const success = plugin.lastSuccessUs === null
         ? 'never updated'
         : `last success ${formatDurationUs(
             Math.max(0, GLib.get_monotonic_time() - plugin.lastSuccessUs))} ago`;
     const failure = plugin.lastFailure === null
-        ? 'no failure'
-        : `failure ${plugin.lastFailure.kind}`;
-    return `${plugin.mode} · ${plugin.processState} · ${success} · ${failure} · ` +
-        `${plugin.accepted} accepted, ${plugin.rawNoOps} raw no-op, ` +
-        `${plugin.semanticNoOps} semantic no-op, ${plugin.skipped} skipped, ` +
-        `${plugin.restarts} restarts, ${plugin.timeouts} timeouts, ` +
-        `${plugin.outputRejections} rejected · ${plugin.messages} messages, ` +
-        `${plugin.messageRatePerSecond.toFixed(2)} msg/s, ` +
-        `${plugin.stdoutBytes} B stdout, ${plugin.stderrBytes} B stderr, ` +
-        `${plugin.byteRatePerMinute.toFixed(0)} B/min · ` +
-        `${(plugin.noOpRate * 100).toFixed(1)}% no-op · ` +
-        `last child ${formatDurationUs(plugin.lastChildRuntimeUs)}, ` +
-        `uptime ${formatDurationUs(plugin.streamUptimeUs)}, ` +
-        `heartbeat age ${formatDurationUs(plugin.heartbeatAgeUs)}, ` +
-        `backoff ${plugin.currentBackoffMs === null ? 'none' : `${plugin.currentBackoffMs} ms`} · ` +
-        `nice ${plugin.niceRequested === null
-            ? 'disabled'
-            : plugin.niceApplied === false ? 'unavailable' : plugin.niceRequested}`;
+        ? plugin.lastSuccessUs === null ? 'waiting for first update' : 'healthy'
+        : `last failure: ${failureLabel(plugin.lastFailure.kind)}`;
+    return `${plugin.mode} · ${plugin.processState} · ${success} · ${failure}`;
+}
+
+function failureLabel(kind) {
+    const labels = {
+        'byte-rate': 'stdout rate limit',
+        'heartbeat-timeout': 'heartbeat timeout',
+        'line-limit': 'line size limit',
+        'message-rate': 'message rate limit',
+        'nonzero-exit': 'plugin exited with an error',
+        'protocol': 'invalid plugin output',
+        'spawn': 'plugin could not start',
+        'startup-timeout': 'startup timeout',
+        'stderr-limit': 'stderr size limit',
+        'stderr-rate': 'stderr rate limit',
+        'stdout-limit': 'stdout size limit',
+        'timeout': 'execution timeout',
+        'utf8': 'invalid UTF-8 output',
+    };
+    return labels[kind] ?? kind.replaceAll('-', ' ');
 }
 
 function phaseSubtitle(phase) {

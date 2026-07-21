@@ -36,6 +36,8 @@ export class ProductionDiagnostics {
         this._traceTimerId = 0;
         this._traceExporter = null;
         this._lastTraceLogUs = null;
+        this._lastExportPath = null;
+        this._lastExportError = null;
         this._slowPhaseLogs = new Map();
     }
 
@@ -92,6 +94,7 @@ export class ProductionDiagnostics {
         if (this._diagnostics.traceActive || this._traceExporter !== null)
             return null;
         const traceId = this._diagnostics.startTrace(this._timing());
+        this._lastExportError = null;
         this._traceTimerId = GLib.timeout_add_seconds(
             GLib.PRIORITY_DEFAULT,
             durationSeconds,
@@ -120,6 +123,7 @@ export class ProductionDiagnostics {
             diagnostics: this._diagnostics.snapshot(),
             runtime: this._getRuntimeSnapshot(),
             registryErrors: this._getRegistryErrors(),
+            traceControl: this._traceControlSnapshot(),
         };
         const json = JSON.stringify(document);
         this.recordPhase('get-summary', this._clock.nowUs() - startedUs);
@@ -162,6 +166,8 @@ export class ProductionDiagnostics {
                     'trace-serialize', durationUs),
                 onComplete: path => {
                     this._traceExporter = null;
+                    this._lastExportPath = path;
+                    this._lastExportError = null;
                     this._service?.emitTraceReady(traceData.id, path);
                     const nowUs = this._clock.nowUs();
                     if (this._lastTraceLogUs === null ||
@@ -172,6 +178,7 @@ export class ProductionDiagnostics {
                 },
                 onError: error => {
                     this._traceExporter = null;
+                    this._lastExportError = 'Trace export failed';
                     console.error(`[pico-argos] Trace export failed: ${error.message}`);
                 },
             });
@@ -215,6 +222,16 @@ export class ProductionDiagnostics {
         return {
             monotonicUs: this._clock.nowUs(),
             realtimeUs: this._clock.realtimeUs(),
+        };
+    }
+
+    _traceControlSnapshot() {
+        return {
+            state: this._diagnostics.traceActive
+                ? 'recording'
+                : this._traceExporter !== null ? 'exporting' : 'idle',
+            lastExportPath: this._lastExportPath,
+            lastExportError: this._lastExportError,
         };
     }
 }
