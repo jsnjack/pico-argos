@@ -90,3 +90,32 @@ performance contract.
 
 Build the installable GNOME Shell 50 package with `make package`. Use
 `make install` only when an explicit local installation is intended.
+
+## Compatibility and limitations
+
+- The supported production target is Linux, GNOME Shell 50, and Wayland; the
+  current development host is Fedora 44. Lock-screen operation is unsupported.
+- Plugins are trusted executables running as the user, not sandboxed code. The
+  runtime supervises direct children only, so plugins must stay in the
+  foreground and must not daemonize.
+- Protocol version 1 intentionally omits Argos text parsing, markup, arbitrary
+  styling, images, nested menus, terminal actions, and sub-second one-shot
+  polling.
+- Visible panel changes necessarily request repaint. pico-argos removes
+  redundant mutations but cannot repair a lower-level Mutter, GPU, or driver
+  presentation defect.
+- The reference system monitor is Linux-specific. Automatic disk and primary
+  interface selection can be ambiguous with device mapper, RAID, VPNs, policy
+  routing, containers, or simultaneous links; explicit plugin configuration is
+  authoritative.
+- Shell stage trace events are correlation aids, not GPU-fence, KMS-ready,
+  page-flip, or physical-presentation measurements.
+- Wayland extension code replacement normally needs a nested Shell or a
+  logout/login cycle. Distribution through extensions.gnome.org is not assumed
+  for a runtime that intentionally executes user-installed programs.
+
+The implementation and nested GNOME acceptance gate are complete. Release
+frame-latency acceptance still requires the specified interleaved tests on the
+affected AMD laptop with both 120-Hz displays connected, followed by the
+one-hour steady-state run. Do not turn the current green build into a physical
+presentation-performance claim until those measurements are captured.

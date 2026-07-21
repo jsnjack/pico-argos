@@ -16,9 +16,10 @@ It renders bounded structured output from user-installed executable plugins.
 The core knows only plugin manifests, process lifecycle, protocol validation,
 semantic state, rendering, and diagnostics; domain integrations remain plugins.
 
-The repository is implementing the universal runtime on top of the completed
-Phase 0 performance harness. Treat `SPEC.md` as the normative product and
-technical contract.
+The repository contains the production universal runtime, reference plugins,
+diagnostics, preferences, and nested-Shell acceptance harness on top of the
+Phase 0 performance instrumentation. Treat `SPEC.md` as the normative product
+and technical contract.
 
 ---
 
@@ -35,7 +36,7 @@ pico-argos@jsnjack.github.io/   Installable GNOME Shell 50 extension source
   lib/                          Diagnostics, runtime, state, and persistent rendering
   schemas/                      Extension GSettings schema
 plugins/                        Reference protocol plugins, outside the extension artifact
-tests/                          Future integration and performance fixtures
+tests/                          Runner fixtures and nested-Shell integration tests
 ```
 
 The installable extension package must not contain reference plugins. Core and
@@ -45,7 +46,7 @@ plugins communicate exclusively through the public versioned protocol.
 
 ## Key Flows
 
-The current Phase 0 flow is:
+The implemented production flow and its retained Phase 0 instrumentation are:
 
 1. `PerformanceController` owns the enabled generation, timer, and synthetic
    child process.
@@ -61,7 +62,7 @@ The current Phase 0 flow is:
 7. Stopped traces are encoded in bounded idle slices, written asynchronously
    below the XDG cache directory, and announced through `TraceReady`.
 8. `manifest.js`, `protocol.js`, and `state.js` provide the Shell-independent
-   version 1 validation and semantic no-op core used by the upcoming runtime.
+   version 1 validation and semantic no-op core used by the runtime.
 9. `PluginRegistry` asynchronously validates owned plugin trees, publishes an
    ordered initial set, and debounces atomic manifest/executable replacement.
 10. `OneShotScheduler` deterministically phases deadlines, coalesces bounded
@@ -101,8 +102,8 @@ The production universal runtime flow is:
 ```bash
 npm install      # install pinned project development tooling
 make check       # complete non-installing validation gate
-make test        # GJS unit tests once tests exist
-make package     # build the extension zip once source exists
+make test        # deterministic GJS unit and fixture tests
+make package     # build the extension zip
 make install     # explicitly install the local package
 make standards   # refresh shared standards from jsnjack/standards
 ```
@@ -154,7 +155,7 @@ does not belong in that schema.
 
 ## Known Issues
 
-- Phase 0 target-hardware A/B capture has not been run yet.
-- Target-hardware frame-latency acceptance measurements remain outstanding.
+- Target-hardware dual-120-Hz A/B, full-workload, and one-hour stability
+  measurements remain outstanding and require the external display connected.
 - Distribution through extensions.gnome.org is not assumed because arbitrary
   executable plugin support may conflict with review policy.
