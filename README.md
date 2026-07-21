@@ -129,4 +129,6 @@ The implementation and nested GNOME acceptance gate are complete. Release
 frame-latency acceptance still requires the specified interleaved tests on the
 affected AMD laptop with both 120-Hz displays connected, followed by the
 one-hour steady-state run. Do not turn the current green build into a physical
-presentation-performance claim until those measurements are captured.
+presentation-performance claim until those measurements are captured. See
+[tests/performance/README.md](./tests/performance/README.md) for the physical
+acceptance tooling and the exact procedure.

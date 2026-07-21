@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "id": "perf-changing",
+  "mode": "stream",
+  "command": ["gjs", "-m", "./run.js"],
+  "startupTimeoutMs": 2000,
+  "heartbeatTimeoutMs": 2000,
+  "maxMessagesPerSecond": 5,
+  "maxBytesPerMinute": 65536,
+  "position": "right",
+  "order": 100,
+  "nice": 10,
+  "reserveTextChars": 5,
+  "passEnvironment": [],
+  "failurePolicy": "hide",
+  "maxStaleMs": 2000
+}

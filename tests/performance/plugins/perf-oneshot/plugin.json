@@ -1,0 +1,16 @@
+{
+  "manifestVersion": 1,
+  "id": "perf-oneshot",
+  "mode": "oneshot",
+  "command": ["gjs", "-m", "./run.js"],
+  "intervalMs": 1000,
+  "timeoutMs": 500,
+  "refreshOnOpen": false,
+  "position": "right",
+  "order": 100,
+  "nice": 10,
+  "reserveTextChars": 5,
+  "passEnvironment": [],
+  "failurePolicy": "hide",
+  "maxStaleMs": 3000
+}

@@ -297,7 +297,7 @@ output protocol and MUST NOT import extension internals.
 
 ## 7. Reference System Monitor Stream Plugin
 
-CPU, memory, disk, and network metrics are implemented by one optional
+CPU, GPU, memory, disk, and network metrics are implemented by one optional
 `system-monitor` stream plugin. The plugin is distributed separately from the
 extension artifact, uses only the public plugin contract, and MUST NOT spawn
 external commands on each sample.
@@ -310,10 +310,10 @@ the extension.
 
 ### 7.1 Sampling
 
-- CPU and network counters are sampled every 250 ms by default.
+- CPU, GPU, and network counters are sampled every 250 ms by default.
 - Disk counters are sampled every 500 ms by default.
 - Memory is sampled every 1,000 ms by default.
-- One monotonic scheduler drives all four cadences. It wakes at the earliest due
+- One monotonic scheduler drives all five cadences. It wakes at the earliest due
   deadline and reads only the sources due in that cycle.
 - The reference plugin MAY synchronously read bounded `/proc` and `/sys` files
   because it executes outside GNOME Shell. It SHOULD open each stable path once,
@@ -361,7 +361,30 @@ current CPU sample. Linux documents `iowait` as imperfect and occasionally
 decreasing; the plugin MUST treat this metric as an estimate rather than an
 exact utilization measurement.
 
-### 7.3 Memory
+### 7.3 GPU
+
+The plugin reads the kernel DRM `gpu_busy_percent` counter from
+`/sys/class/drm/<card>/device/gpu_busy_percent`, an already-normalized
+percentage that requires no delta computation.
+
+The DRM card is selected by plugin configuration through `gpuDevice`, with
+`auto` as the default. Auto resolution enumerates `/sys/class/drm/card[0-9]*`
+entries (`renderD*` nodes never match and are excluded), prefers the boot VGA
+card among those exposing a readable `gpu_busy_percent` file, and otherwise
+falls back to the lowest-numbered card that exposes it. Resolution MUST NOT
+poll by spawning `lspci`, `nvidia-smi`, or another external command. If no
+card exposes the counter, the field shows the fixed-width unavailable
+placeholder and emits a stable snapshot rather than retrying every cycle.
+
+When `gpuDevice` is `auto`, the plugin watches `/sys/class/drm` and
+re-resolves the selected card on any change, closing and reopening its reader
+only when the resolved card actually differs. An explicit `cardN` value is
+used as configured and is never re-resolved; if that path stops exposing the
+counter, the field reports unavailable until the process restarts. GPU
+utilization shares the 250-ms fast cadence with CPU and network so the field
+never appears staler than CPU on the same panel.
+
+### 7.4 Memory
 
 The plugin reads `/proc/meminfo` and computes:
 
@@ -373,7 +396,7 @@ usage = 100 * used / MemTotal
 `MemAvailable` is required. The plugin MUST NOT substitute `MemFree`, because
 that would count readily reclaimable cache as unavailable memory.
 
-### 7.4 Disk
+### 7.5 Disk
 
 The block device is selected by plugin configuration, with `auto` as the
 default. Version 1 MUST support an explicit device because root filesystems may
@@ -395,7 +418,7 @@ change. If reliable resolution is not possible, the disk field shows
 unavailable and emits a stable unavailable snapshot; it MUST NOT poll by
 spawning `findmnt`, `lsblk`, or `iostat`.
 
-### 7.5 Network
+### 7.6 Network
 
 The plugin determines the primary interface using NetworkManager D-Bus when
 available. It falls back to an explicit configured interface, then to the IPv4
@@ -417,13 +440,13 @@ first sample after a reset displays zero rather than a false spike.
 Rates use SI units (`kB/s`, `MB/s`, `GB/s`) because the current scripts divide
 by powers of 1,000.
 
-### 7.6 System Panel Rendering
+### 7.7 System Panel Rendering
 
-All four metrics are rendered in one persistent `St.Label`. The string has
+All five metrics are rendered in one persistent `St.Label`. The string has
 fixed-width fields and uses a compact monospace style, for example:
 
 ```text
-cpu  12% mem  47% io   0% rx  123.4K tx    2.1M
+cpu  12% gpu  34% mem  47% io   0% rx  123.4K tx    2.1M
 ```
 
 The formatter MUST keep the number of characters constant across ordinary
@@ -434,20 +457,21 @@ One combined label deliberately replaces four independently updating Argos
 buttons. This reduces process launches, panel layout changes, property writes,
 and opportunities to trigger separate compositor frames.
 
-### 7.7 Plugin Configuration
+### 7.8 Plugin Configuration
 
-Field selection, disk device, network interface, and sampling intervals belong
-to the reference plugin's own configuration. Its defaults are 250 ms for CPU
-and network, 500 ms for disk, and 1,000 ms for memory. The extension neither
-defines nor parses those domain-specific values. Position, order, process
-limits, and failure behavior remain in the universal manifest.
+Field selection, GPU device, disk device, network interface, and sampling
+intervals belong to the reference plugin's own configuration. Its defaults are
+250 ms for CPU, GPU, and network, 500 ms for disk, and 1,000 ms for memory. The
+extension neither defines nor parses those domain-specific values. Position,
+order, process limits, and failure behavior remain in the universal manifest.
 
 The extension's GSettings schema is
-`org.gnome.shell.extensions.pico-argos` and contains one persistent setting:
+`org.gnome.shell.extensions.pico-argos` and contains two persistent settings:
 
 | Key | Type | Default | Constraint |
 |---|---|---|---|
 | `diagnostics-mode` | `s` | `summary` | `summary` or `off`; trace is transient |
+| `disabled-plugins` | `as` | `[]` | Validated discovered plugin identifiers to keep stopped and unrendered |
 
 ## 8. Universal Plugin Model
 
@@ -1138,7 +1162,7 @@ Pure modules are tested outside GNOME Shell with GJS:
 - histogram and trace-ring bounds
 
 The scheduler and runtimes receive an injected clock in tests. Reference plugin
-tests separately cover CPU, memory, disk, and network parsing; counter
+tests separately cover CPU, GPU, memory, disk, and network parsing; counter
 wrap/reset; elapsed-time handling; and fixed-width formatting. Those tests MUST
 use only the public protocol contract.
 
@@ -1292,8 +1316,8 @@ investigation back to Mutter/amdgpu repaint behavior.
 
 ### Phase 2: Reference Plugins
 
-- Consolidated CPU, memory, disk, and network stream plugin
-- Default 250-ms CPU/network sampling and freshness acceptance measurements
+- Consolidated CPU, GPU, memory, disk, and network stream plugin
+- Default 250-ms CPU/GPU/network sampling and freshness acceptance measurements
 - Combined fixed-width system indicator output
 - Dependabot, pull-request, VPN, and weather one-shot plugins
 - Reference plugin parser and protocol tests

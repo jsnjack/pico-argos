@@ -307,6 +307,35 @@ Keep panel width constant where practical. Stable snapshots let StateStore stop
 work before render; stable menu IDs let one changed row update one retained
 actor.
 
+## Claiming physical performance acceptance
+
+`make check` validates protocol, lifecycle, and functional correctness in a
+nested Shell. It does not measure real frame delivery. Never claim frame-drop,
+jank, or "no regression" results from packaging, unit tests, nested-Shell
+functional passes, or average CPU usage alone.
+
+A physical performance claim is acceptable only when it cites all of:
+
+- exactly two active 120 Hz monitors, verified with
+  `tests/performance/monitor-state.js --require-dual-120` against the target
+  display layout;
+- at least five paired, interleaved baseline/scenario runs compared with
+  `tests/performance/compare-presentation.js`, which reports a Student-t 95%
+  confidence interval and enforces a maximum 0.1% absolute mean delivered-FPS
+  change;
+- one continuous one-hour full-workload run analyzed with
+  `tests/performance/analyze-steady-state.js` for stable actor counts, a
+  stable enabled-plugin set, and non-monotonic Shell RSS growth;
+- the exact package SHA-256, commit, GNOME Shell/GJS versions, and monitor
+  layout captured alongside the run.
+
+`tests/performance/run-acceptance.sh` reproduces this full matrix; see
+[`tests/performance/README.md`](./tests/performance/README.md) for the
+complete procedure. It requires the exact package already installed and an
+active Wayland login session, and only a fresh explicit user authorization for
+that install/logout-login cycle, matching [AGENTS.md](./AGENTS.md); the runner
+itself installs nothing and never touches the live Shell on its own.
+
 ## Diagnostics and troubleshooting
 
 Use the preferences Diagnostics page for sanitized plugin health, process
