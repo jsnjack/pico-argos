@@ -52,6 +52,18 @@ if ! gnome-extensions info "$uuid" >/dev/null 2>&1; then
     exit 1
 fi
 
+# gnome-extensions install places the schema only inside the extension's own
+# directory; it is never compiled into a system/user glib-2.0/schemas path,
+# so the standalone gsettings CLI cannot see it without an explicit schema
+# directory, unlike GNOME Shell itself, which loads extension schemas from
+# their own directory internally.
+extension_schema_dir="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/$uuid/schemas"
+if [[ ! -f "$extension_schema_dir/gschemas.compiled" ]]; then
+    echo "Compiled schema missing at $extension_schema_dir; reinstall with 'make install'" >&2
+    exit 1
+fi
+export GSETTINGS_SCHEMA_DIR=$extension_schema_dir
+
 original_disabled=$(gsettings get "$schema" disabled-plugins)
 original_diagnostics=$(gsettings get "$schema" diagnostics-mode)
 original_enabled=false
