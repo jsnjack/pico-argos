@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import GLib from 'gi://GLib';
+
 import {RuntimeManager} from './runtime-manager.js';
 
 class FakeClock {
@@ -69,6 +71,15 @@ function raw(text, whitespace = false) {
 async function settle() {
     for (let index = 0; index < 20; index++)
         await Promise.resolve();
+}
+
+function settleIdle() {
+    return new Promise(resolve => {
+        GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            resolve();
+            return GLib.SOURCE_REMOVE;
+        });
+    });
 }
 
 const clock = new FakeClock();
@@ -170,6 +181,22 @@ if (!runtime.refreshNow('fixture'))
 await settle();
 if (runtime.snapshot().plugins[0].lastFailure !== null)
     throw new Error('Explicit one-shot refresh did not recover valid state');
+
+runtime.setPlugin(plugin({
+    mode: 'stream',
+    startupTimeoutMs: 5_000,
+    heartbeatTimeoutMs: 0,
+    maxMessagesPerSecond: 2,
+    maxBytesPerMinute: 262_144,
+}));
+await settleIdle();
+if (runtime.snapshot().plugins[0].processState !== 'starting')
+    throw new Error('Replacement stream did not enter starting health state');
+runtime.setPlugin(plugin({refreshOnOpen: false}));
+if (runtime.snapshot().plugins[0].processState !== 'idle' ||
+    runtime.snapshot().plugins[0].mode !== 'oneshot') {
+    throw new Error('Mode replacement retained stale stream health state');
+}
 
 runtime.removePlugin('fixture');
 runtime.destroy();

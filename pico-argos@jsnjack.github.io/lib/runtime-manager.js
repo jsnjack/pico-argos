@@ -86,8 +86,16 @@ export class RuntimeManager {
         this._health.set(
             plugin.id,
             this._health.get(plugin.id) ?? createHealth(plugin, this._clock.nowUs()));
-        this._health.get(plugin.id).mode = plugin.manifest.mode;
-        this._health.get(plugin.id).niceRequested = plugin.manifest.nice;
+        const health = this._health.get(plugin.id);
+        if (previous !== null) {
+            health.processState = 'idle';
+            health.runStartedUs = null;
+            health.currentBackoffMs = null;
+            health.lastHeartbeatUs = null;
+            health.niceApplied = null;
+        }
+        health.mode = plugin.manifest.mode;
+        health.niceRequested = plugin.manifest.nice;
         if (plugin.manifest.mode === 'oneshot')
             this._oneShotScheduler.setPlugin(plugin.manifest);
         else
