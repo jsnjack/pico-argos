@@ -4,8 +4,16 @@ import {vpnSnapshot} from './logic.js';
 
 if (vpnSnapshot({protected: false, country_code: 'NL'}).panel !== null)
     throw new Error('Unprotected VPN state is not hidden');
-const protectedState = vpnSnapshot({protected: true, country_code: 'NL'});
-if (protectedState.panel.icon !== 'weather-snow-symbolic' ||
-    protectedState.menu[0].text !== 'Connected to NL')
+const protectedState = vpnSnapshot({
+    protected: true,
+    country_code: 'NL',
+    country: 'Netherlands',
+    city: 'Amsterdam',
+    ip: '192.0.2.1',
+});
+if (protectedState.panel.icon !== 'network-vpn-symbolic' ||
+    protectedState.menu[0].text !== 'Connected to NL' ||
+    protectedState.menu[1].text !== 'Location: Amsterdam, Netherlands' ||
+    JSON.stringify(protectedState).includes('192.0.2.1'))
     throw new Error('Protected VPN state is incorrect');
-print('ok - VPN plugin hides unprotected state and shows protected country');
+print('ok - VPN hides unprotected state and presents protected location privately');

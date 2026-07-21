@@ -19,8 +19,14 @@ const snapshot = weatherSnapshot({
 });
 if (snapshot.panel.text !== '12.4° ···' ||
     snapshot.panel.icon !== 'weather-showers-symbolic' ||
-    snapshot.menu.find(item => item.id === 'two-hour')?.text !== '  In 2 hours    14.2°' ||
-    snapshot.menu.find(item => item.id === 'rain-description')?.text !== '  Showers passing through' ||
+    snapshot.menu.find(item => item.id === 'two-hour')?.text !== 'In 2 hours: 14.2°' ||
+    snapshot.menu.find(item => item.id === 'rain-description')?.text !==
+        'Showers passing through' ||
+    snapshot.menu.find(item => item.id === 'rain-onset')?.text !==
+        'Starts around 11:00' ||
+    snapshot.menu.find(item => item.id === 'rain-peak')?.text !==
+        'Peak at 12:00 · 1.4 mm/h' ||
+    snapshot.menu.some(item => item.text?.startsWith(' ')) ||
     snapshot.menu.filter(item => /^rain-\d+$/.test(item.id)).length !== 2)
     throw new Error(`Weather snapshot is incomplete: ${JSON.stringify(snapshot)}`);
 
@@ -34,5 +40,5 @@ const dry = weatherSnapshot({
 });
 if (dry.panel.text !== '8°' || dry.panel.icon !== 'weather-clear-symbolic' ||
     dry.menu.some(item => item.id === 'rain-heading'))
-    throw new Error('Dry weather state does not preserve the legacy all-clear presentation');
-print('ok - weather preserves yauhen.cc conditions, details, and rain timeline');
+    throw new Error('Dry weather state does not preserve the all-clear presentation');
+print('ok - weather presents concise yauhen.cc details and a bounded rain forecast');

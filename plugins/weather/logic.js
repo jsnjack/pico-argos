@@ -28,25 +28,38 @@ export function weatherSnapshot(data) {
     const menu = [
         label('location', location),
         {id: 'details-separator', kind: 'separator'},
-        label('current', `  Now           ${current}° (feels ${formatNumber(feelsLike.now)}°)`),
-        label('two-hour', `  In 2 hours    ${formatNumber(temperature.end)}°`),
-        label('uv', `  UV Index      ${formatNumber(uvIndex.now)}`),
+        label('current', `Now: ${current}° · Feels like ${formatNumber(feelsLike.now)}°`),
+        label('two-hour', `In 2 hours: ${formatNumber(temperature.end)}°`),
+        label('uv', `UV index: ${formatNumber(uvIndex.now)}`),
     ];
 
     const description = data?.buienalarm?.desc;
     if (description !== undefined && description !== null && description !== '') {
         requireText(description, 'rain description');
         menu.push({id: 'description-separator', kind: 'separator'});
-        menu.push(label('rain-description', `  ${description}`));
+        menu.push(label('rain-description', description));
     }
 
-    const nonzero = timeline.filter(entry => entry.value > 0).slice(0, 53);
+    const nonzero = timeline.filter(entry => entry.value > 0);
     if (peak > 0.05) {
+        const onset = nonzero[0];
+        const final = nonzero.at(-1);
+        const peakEntry = nonzero.reduce((highest, entry) =>
+            entry.value > highest.value ? entry : highest);
+        const forecast = boundedForecast(nonzero, peakEntry, 8);
         menu.push({id: 'rain-separator', kind: 'separator'});
-        menu.push(label('rain-heading', '  Rain (next 2h):'));
-        nonzero.forEach((entry, index) => menu.push(label(
+        menu.push(label('rain-heading', 'Rain in the next 2 hours'));
+        menu.push(label('rain-onset', `Starts around ${onset.time}`));
+        menu.push(label(
+            'rain-peak',
+            `Peak at ${peakEntry.time} · ${formatNumber(peakEntry.value)} mm/h`));
+        if (final.time !== onset.time)
+            menu.push(label('rain-end', `Last expected around ${final.time}`));
+        menu.push({id: 'forecast-separator', kind: 'separator'});
+        menu.push(label('rain-forecast-heading', 'Selected forecast'));
+        forecast.forEach((entry, index) => menu.push(label(
             `rain-${index}`,
-            `    ${entry.time}  ${formatNumber(entry.value)} mm/h`)));
+            `${entry.time} · ${formatNumber(entry.value)} mm/h`)));
     }
 
     return {
@@ -61,6 +74,19 @@ export function weatherSnapshot(data) {
         },
         menu,
     };
+}
+
+function boundedForecast(entries, peakEntry, maximum) {
+    if (entries.length <= maximum)
+        return entries;
+    const selected = new Set([0, entries.indexOf(peakEntry), entries.length - 1]);
+    for (let slot = 0; selected.size < maximum && slot < maximum * 2; slot++) {
+        selected.add(Math.round(slot * (entries.length - 1) / (maximum - 1)));
+    }
+    return [...selected]
+        .sort((left, right) => left - right)
+        .slice(0, maximum)
+        .map(index => entries[index]);
 }
 
 function weatherIcon(condition) {
