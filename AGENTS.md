@@ -4,6 +4,9 @@
 > [AGENTS.gjs.md](./AGENTS.gjs.md) for universal and GJS GNOME Shell extension
 > conventions. Refresh: `make standards`
 
+For installing, using, authoring, or migrating executable status plugins, read
+[AGENTS.extensioons.md](./AGENTS.extensioons.md) before making changes.
+
 ---
 
 ## Overview

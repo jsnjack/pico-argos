@@ -3,6 +3,11 @@
 `pico-argos` is a performance-first, universal GNOME Shell status extension for
 bounded structured output from executable plugins.
 
+Plugin users and authors should start with
+[AGENTS.extensioons.md](./AGENTS.extensioons.md), which covers installation,
+the complete version 1 contract, migration compatibility, testing, and
+diagnostics.
+
 The production universal runtime defined in [SPEC.md](./SPEC.md) discovers
 strict manifests below `$XDG_CONFIG_HOME/pico-argos/plugins/`, executes bounded
 one-shot or persistent stream plugins, suppresses raw and semantic no-ops, and
