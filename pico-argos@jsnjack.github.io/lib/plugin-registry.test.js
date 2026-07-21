@@ -177,5 +177,15 @@ interpretedSource.delete(null);
 deletePlugin(interpreted);
 deletePlugin(invalid);
 deletePlugin(ignored);
+
+const limited = [];
+for (let index = 0; index < 17; index++)
+    limited.push(createPlugin(`limit-${String(index).padStart(2, '0')}`));
+const limitResult = await new PluginRegistry(rootPath).discover();
+if (limitResult.plugins.length !== 16 || limitResult.errors.length !== 1 ||
+    !limitResult.errors[0].message.includes('Plugin limit 16'))
+    throw new Error('Registry did not enforce the global 16-plugin bound');
+for (const directory of limited)
+    deletePlugin(directory);
 root.delete(null);
 print('ok - plugin registry discovers valid owned plugins asynchronously');

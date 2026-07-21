@@ -60,6 +60,9 @@ const line = new StreamFramer({
     maxBytesPerMinute: 1_048_576,
     nowUs: 0,
 });
+const exactLine = 'x'.repeat(65_535);
+if (line.push(encoder.encode(`${exactLine}\n`), 0)[0] !== exactLine)
+    throw new Error('Framer rejected an exact 64-KiB line');
 expectKind(() => line.push(encoder.encode(`${'x'.repeat(65_536)}\n`), 0), 'line-limit');
 
 const stderr = new StreamStderr(0);
