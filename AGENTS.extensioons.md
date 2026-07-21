@@ -151,7 +151,8 @@ The exact rules are:
 - `reserveTextChars` is 0–128. A nonzero value is a hard Unicode-scalar limit,
   not truncation. With `appearance: "monospace"`, it also reserves stable panel
   width.
-- `passEnvironment` has at most 16 unique shell variable names.
+- `passEnvironment` has at most 16 unique shell variable names. It cannot name
+  the runtime's fixed `HOME`, locale, `PATH`, XDG, or `PICO_ARGOS_*` variables.
 - `failurePolicy` is `keep-last`, `hide`, or `show-error`.
 - `maxStaleMs` is `null` or 1–604,800,000. In one-shot mode it cannot be less
   than `intervalMs`.

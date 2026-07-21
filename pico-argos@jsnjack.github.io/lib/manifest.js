@@ -7,6 +7,20 @@ export const MANIFEST_VERSION = 1;
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const ENVIRONMENT_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const RESERVED_ENVIRONMENT = new Set([
+    'HOME',
+    'PATH',
+    'LANG',
+    'LC_ALL',
+    'XDG_CONFIG_HOME',
+    'XDG_CACHE_HOME',
+    'XDG_DATA_HOME',
+    'XDG_STATE_HOME',
+    'XDG_RUNTIME_DIR',
+    'PICO_ARGOS_PROTOCOL',
+    'PICO_ARGOS_MENU_OPEN',
+    'PICO_ARGOS_PLUGIN_ID',
+]);
 const MODES = new Set(['oneshot', 'stream']);
 const POSITIONS = new Set(['left', 'center', 'right']);
 const FAILURE_POLICIES = new Set(['keep-last', 'hide', 'show-error']);
@@ -155,6 +169,8 @@ function validateEnvironment(value) {
     for (const name of value) {
         if (typeof name !== 'string' || !ENVIRONMENT_PATTERN.test(name))
             throw new ManifestError(`Manifest environment name is invalid: ${name}`);
+        if (RESERVED_ENVIRONMENT.has(name))
+            throw new ManifestError(`Manifest environment name is reserved: ${name}`);
         if (unique.has(name))
             throw new ManifestError(`Manifest environment name is duplicated: ${name}`);
         unique.add(name);

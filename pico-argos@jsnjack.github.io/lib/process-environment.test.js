@@ -27,6 +27,9 @@ if (names.includes('PICO_ARGOS_MENU_OPEN'))
     throw new Error('Stream environment unexpectedly included menu-open state');
 if (!environment.includes('PATH=/usr/local/bin:/usr/bin:/bin'))
     throw new Error('Plugin environment inherited a non-minimal executable path');
+const reserved = buildPluginEnvironment({id: 'test', passEnvironment: ['PATH']});
+if (!reserved.includes('PATH=/usr/local/bin:/usr/bin:/bin'))
+    throw new Error('Allowlisted input overrode the runtime fixed environment');
 const oneShot = buildPluginEnvironment({id: 'test', passEnvironment: []}, false);
 if (!oneShot.includes('PICO_ARGOS_MENU_OPEN=false'))
     throw new Error('One-shot environment omitted menu-open state');

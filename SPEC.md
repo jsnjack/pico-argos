@@ -520,6 +520,8 @@ Manifest rules:
   values are never recorded in diagnostics.
 - `passEnvironment` contains at most 16 unique names matching
   `[A-Za-z_][A-Za-z0-9_]*`.
+- `passEnvironment` MUST NOT name the fixed `HOME`, `PATH`, locale, XDG, or
+  `PICO_ARGOS_*` variables supplied by the runtime.
 - `failurePolicy` is `keep-last`, `hide`, or `show-error`.
 - `maxStaleMs` is a positive integer no larger than 604,800,000, or `null` to
   disable visual staleness. For one-shot plugins it MUST be at least

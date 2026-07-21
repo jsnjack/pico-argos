@@ -65,6 +65,8 @@ assertInvalid({command: ['./run', 'bad\0argument']}, /NUL/);
 assertInvalid({timeoutMs: 5_000}, /less than/);
 assertInvalid({maxStaleMs: 1_000}, /at least/);
 assertInvalid({passEnvironment: ['TOKEN', 'TOKEN']}, /duplicated/);
+assertInvalid({passEnvironment: ['PATH']}, /reserved/);
+assertInvalid({passEnvironment: ['PICO_ARGOS_PROTOCOL']}, /reserved/);
 assertInvalid({startupTimeoutMs: 1_000}, /mode-specific/);
 assertInvalid({intervalMs: 1_000}, /mode-specific/, 'stream');
 

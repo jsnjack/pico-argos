@@ -27,7 +27,7 @@ export function buildPluginEnvironment(manifest, menuOpen = null) {
         values.set('PICO_ARGOS_MENU_OPEN', menuOpen ? 'true' : 'false');
     for (const name of manifest.passEnvironment) {
         const value = GLib.getenv(name);
-        if (value !== null)
+        if (value !== null && !values.has(name))
             values.set(name, value);
     }
     return [...values].map(([name, value]) => `${name}=${value}`);
