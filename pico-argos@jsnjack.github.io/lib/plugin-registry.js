@@ -10,6 +10,7 @@ export const MAX_PLUGINS = 16;
 
 const MAX_DIRECTORY_CANDIDATES = 64;
 const MAX_MANIFEST_BYTES = 64 * 1_024;
+const MANIFEST_READ_BYTES = 8 * 1_024;
 const DEBOUNCE_MS = 250;
 const PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const ENUMERATION_ATTRIBUTES = [
@@ -153,7 +154,10 @@ export class PluginRegistry {
         if (manifestInfo.get_size() > MAX_MANIFEST_BYTES)
             throw new Error(`Plugin ${candidate.name} manifest exceeds ${MAX_MANIFEST_BYTES} bytes`);
 
-        const contents = await loadContents(manifestFile, this._cancellable);
+        const contents = await loadBoundedContents(
+            manifestFile,
+            MAX_MANIFEST_BYTES,
+            this._cancellable);
         let raw;
         try {
             raw = new TextDecoder('utf-8', {fatal: true}).decode(contents);
@@ -427,15 +431,77 @@ function queryInfo(file, attributes, cancellable) {
     });
 }
 
-function loadContents(file, cancellable) {
+async function loadBoundedContents(file, maximumBytes, cancellable) {
+    const stream = await openFile(file, cancellable);
+    const chunks = [];
+    let totalBytes = 0;
+    try {
+        for (;;) {
+            const remainingProbeBytes = maximumBytes + 1 - totalBytes;
+            if (remainingProbeBytes === 0)
+                throw new Error(`Manifest exceeds ${maximumBytes} bytes`);
+            const chunk = await readBytes(
+                stream,
+                Math.min(MANIFEST_READ_BYTES, remainingProbeBytes),
+                cancellable);
+            if (chunk.length === 0)
+                break;
+            chunks.push(chunk);
+            totalBytes += chunk.length;
+            if (totalBytes > maximumBytes)
+                throw new Error(`Manifest exceeds ${maximumBytes} bytes`);
+        }
+    } finally {
+        await closeStream(stream);
+    }
+
+    const contents = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+        contents.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return contents;
+}
+
+function openFile(file, cancellable) {
     return new Promise((resolve, reject) => {
-        file.load_contents_async(cancellable, (source, result) => {
+        file.read_async(GLib.PRIORITY_DEFAULT, cancellable, (source, result) => {
             try {
-                const [, contents] = source.load_contents_finish(result);
-                resolve(contents);
+                resolve(source.read_finish(result));
             } catch (error) {
                 reject(error);
             }
+        });
+    });
+}
+
+function readBytes(stream, count, cancellable) {
+    return new Promise((resolve, reject) => {
+        stream.read_bytes_async(
+            count,
+            GLib.PRIORITY_DEFAULT,
+            cancellable,
+            (source, result) => {
+                try {
+                    const bytes = source.read_bytes_finish(result);
+                    resolve(new Uint8Array(bytes.get_data()));
+                } catch (error) {
+                    reject(error);
+                }
+            });
+    });
+}
+
+function closeStream(stream) {
+    return new Promise(resolve => {
+        stream.close_async(GLib.PRIORITY_DEFAULT, null, (source, result) => {
+            try {
+                source.close_finish(result);
+            } catch (_error) {
+                // Preserve the read or validation result when closing fails.
+            }
+            resolve();
         });
     });
 }

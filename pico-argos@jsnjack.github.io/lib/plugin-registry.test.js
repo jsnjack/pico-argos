@@ -187,5 +187,19 @@ if (limitResult.plugins.length !== 16 || limitResult.errors.length !== 1 ||
     throw new Error('Registry did not enforce the global 16-plugin bound');
 for (const directory of limited)
     deletePlugin(directory);
+
+const oversized = createPlugin('oversized');
+oversized.get_child('plugin.json').replace_contents(
+    `{"padding":"${'x'.repeat(64 * 1_024)}"}`,
+    null,
+    false,
+    Gio.FileCreateFlags.PRIVATE,
+    null);
+const oversizedResult = await new PluginRegistry(rootPath).discover();
+if (oversizedResult.plugins.length !== 0 || oversizedResult.errors.length !== 1 ||
+    !oversizedResult.errors[0].message.includes('exceeds 65536 bytes')) {
+    throw new Error('Registry did not reject an oversized manifest');
+}
+deletePlugin(oversized);
 root.delete(null);
 print('ok - plugin registry discovers valid owned plugins asynchronously');
