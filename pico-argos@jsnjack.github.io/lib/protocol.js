@@ -22,7 +22,7 @@ const MENU_COMMON_KEYS = new Set(['id', 'kind']);
 const MENU_TEXT_KEYS = new Set(['id', 'kind', 'text']);
 const MENU_LINK_KEYS = new Set(['id', 'kind', 'text', 'uri']);
 const ICON_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-const APPEARANCES = new Set(['compact', 'monospace', 'normal']);
+const APPEARANCES = new Set(['accent', 'compact', 'monospace', 'normal']);
 const SEVERITIES = new Set(['normal', 'warning', 'critical']);
 
 /** Describes invalid JSON or a version 1 protocol schema violation. */

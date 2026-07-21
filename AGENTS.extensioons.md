@@ -197,7 +197,10 @@ Write one compact UTF-8 JSON object. A snapshot example is:
 - A visible panel needs `text` or an icon-theme `icon`.
 - `text` is plain text with no controls/newlines and at most 128 Unicode scalar
   values. Markup and Argos `| key=value` attributes are not interpreted.
-- `appearance` is `normal`, `compact`, or `monospace`.
+- `appearance` is `normal`, `compact`, `monospace`, or `accent`. `accent` is
+  larger, system-accent-colored text (when `severity` is `normal`); like every
+  appearance value, the actual color and size are extension-owned CSS, never
+  a raw value a plugin supplies.
 - `severity` is `normal`, `warning`, or `critical`.
 - `accessibleName` is mandatory for icon-only state and should explain terse
   glyphs or abbreviations.
@@ -270,7 +273,7 @@ reference defaults are compatibility constraints:
 | system monitor | Linux `/proc` and `/sys` counters | legacy `cpu`/`mem`/`io`, arrows, `KBs`/`MBs`, and 13 px monospace remain the default; compact is opt-in |
 | Dependabot | GitHub Dependabot alerts API | hidden at zero; urgent-update symbolic icon and count; up to five direct alert links |
 | pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
-| VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; literal `❄` glyph text (avoids duplicating GNOME's own generic VPN icon and the weather plugin's cloud icons); private country/city details with no public IP |
+| VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; larger, accent-colored literal `❄` glyph text (avoids duplicating GNOME's own generic VPN icon and the weather plugin's cloud icons); private country/city details with no public IP |
 | weather | `https://weather.yauhen.cc/api/v1/glance` | center placement, temperature/rain dots/condition icon, concise details, and bounded rain timing |
 
 The `weather.yauhen.cc` source is deliberate. **Do not replace, proxy, or add a

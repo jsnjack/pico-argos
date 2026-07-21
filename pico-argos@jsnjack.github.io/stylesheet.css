@@ -19,6 +19,14 @@
   font-feature-settings: "tnum";
 }
 
+.pico-argos-appearance-accent .pico-argos-label {
+  font-size: 16px;
+}
+
+.pico-argos-appearance-accent.pico-argos-severity-normal .pico-argos-label {
+  color: -st-accent-color;
+}
+
 .pico-argos-severity-warning {
   color: #f5c211;
 }

@@ -615,7 +615,10 @@ Panel rules:
 - Panel text contains no newline or control character.
 - `icon` is a GNOME icon-theme name matching
   `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`.
-- `appearance` is `compact`, `monospace`, or `normal`.
+- `appearance` is `accent`, `compact`, `monospace`, or `normal`. `accent`
+  renders larger text tinted with the desktop's own system accent color when
+  `severity` is `normal`; the color itself is always extension-owned and
+  theme-derived, never a value a plugin supplies directly.
 - `severity` is `normal`, `warning`, or `critical`.
 - `accessibleName` is required if text alone does not explain the state.
 - Markup is never interpreted.

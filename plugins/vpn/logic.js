@@ -25,7 +25,7 @@ export function vpnSnapshot(status) {
         panel: status.protected
             ? {
                 text: '❄',
-                appearance: 'normal',
+                appearance: 'accent',
                 accessibleName: `VPN protected in ${location || countryCode}`,
                 severity: 'normal',
             }

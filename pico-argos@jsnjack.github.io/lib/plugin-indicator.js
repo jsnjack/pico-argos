@@ -18,6 +18,7 @@ const PANEL_BOXES = Object.freeze({
     right: 'right',
 });
 const APPROACH_CLASSES = Object.freeze({
+    accent: 'pico-argos-appearance-accent',
     compact: 'pico-argos-appearance-compact',
     monospace: 'pico-argos-appearance-monospace',
     normal: 'pico-argos-appearance-normal',
