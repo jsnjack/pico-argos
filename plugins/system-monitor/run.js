@@ -29,15 +29,19 @@ class StableReader {
         this._stream = null;
     }
 
-    read() {
+    read(budget) {
         try {
             this._stream ??= Gio.File.new_for_path(this.path).read(null);
             this._stream.seek(0, GLib.SeekType.SET, null);
-            const block = this._stream.read_bytes(MAX_FILE_BYTES, null);
+            const maximumBytes = Math.min(MAX_FILE_BYTES, budget.remaining);
+            if (maximumBytes === 0)
+                throw new Error('Sampling cycle exceeds 64 KiB');
+            const block = this._stream.read_bytes(maximumBytes, null);
             const bytes = new Uint8Array(block.get_data());
-            if (bytes.length === MAX_FILE_BYTES &&
+            if (bytes.length === maximumBytes &&
                 this._stream.read_bytes(1, null).get_size() !== 0)
-                throw new Error(`${this.path} exceeds ${MAX_FILE_BYTES} bytes`);
+                throw new Error(`Sampling ${this.path} exceeds the 64-KiB cycle budget`);
+            budget.consume(bytes.length);
             return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
         } catch (error) {
             this.close();
@@ -55,38 +59,67 @@ class StableReader {
     }
 }
 
+class SampleBudget {
+    constructor() {
+        this.remaining = MAX_FILE_BYTES;
+    }
+
+    consume(bytes) {
+        if (!Number.isInteger(bytes) || bytes < 0 || bytes > this.remaining)
+            throw new Error('Sampling cycle exceeds 64 KiB');
+        this.remaining -= bytes;
+    }
+}
+
 const config = loadConfig();
+const selectedFields = new Set(config.fields);
 const readers = {
     cpu: new StableReader('/proc/stat'),
     memory: new StableReader('/proc/meminfo'),
     network: new StableReader('/proc/net/dev'),
     disk: null,
 };
-let networkInterface = resolveNetworkInterface(config.networkInterface);
-let diskDevice = resolveDiskDevice(config.diskDevice);
-if (diskDevice !== null)
+let networkInterface = selectedFields.has('network')
+    ? resolveNetworkInterface(config.networkInterface)
+    : null;
+let diskDevice = selectedFields.has('disk')
+    ? resolveDiskDevice(config.diskDevice)
+    : null;
+if (selectedFields.has('disk') && diskDevice !== null)
     readers.disk = new StableReader(`/sys/block/${diskDevice}/stat`);
 
 const startedUs = GLib.get_monotonic_time();
-let cpuBaseline = safely(() => parseCpuStat(readers.cpu.read()));
-let networkBaseline = safely(() => networkInterface === null
+const startupBudget = new SampleBudget();
+let cpuBaseline = safely(() => selectedFields.has('cpu')
+    ? parseCpuStat(readers.cpu.read(startupBudget))
+    : null);
+let networkBaseline = safely(() => !selectedFields.has('network') ||
+    networkInterface === null
     ? null
-    : parseNetworkCounters(readers.network.read(), networkInterface));
+    : parseNetworkCounters(readers.network.read(startupBudget), networkInterface));
 let networkBaselineUs = startedUs;
-let diskBaseline = safely(() => readers.disk === null
+let diskBaseline = safely(() => !selectedFields.has('disk') || readers.disk === null
     ? null
-    : parseDiskIoMs(readers.disk.read()));
+    : parseDiskIoMs(readers.disk.read(startupBudget)));
 let diskBaselineUs = startedUs;
 const metrics = {
     cpu: null,
-    memory: safely(() => parseMemoryUsage(readers.memory.read())),
+    memory: safely(() => selectedFields.has('memory')
+        ? parseMemoryUsage(readers.memory.read(startupBudget))
+        : null),
     disk: null,
     receive: 0,
     transmit: 0,
 };
-let nextFastUs = startedUs + config.fastIntervalMs * 1_000;
-let nextDiskUs = startedUs + config.diskIntervalMs * 1_000;
-let nextMemoryUs = startedUs + config.memoryIntervalMs * 1_000;
+let nextFastUs = selectedFields.has('cpu') || selectedFields.has('network')
+    ? startedUs + config.fastIntervalMs * 1_000
+    : Number.POSITIVE_INFINITY;
+let nextDiskUs = selectedFields.has('disk')
+    ? startedUs + config.diskIntervalMs * 1_000
+    : Number.POSITIVE_INFINITY;
+let nextMemoryUs = selectedFields.has('memory')
+    ? startedUs + config.memoryIntervalMs * 1_000
+    : Number.POSITIVE_INFINITY;
 let lastEmissionUs = startedUs;
 let lastSnapshot = null;
 
@@ -108,19 +141,20 @@ function schedule() {
 
 function sample() {
     const nowUs = GLib.get_monotonic_time();
+    const budget = new SampleBudget();
     let sampled = false;
     if (nowUs >= nextFastUs) {
-        sampleFast(nowUs);
+        sampleFast(nowUs, budget);
         nextFastUs = advanceDeadline(nextFastUs, config.fastIntervalMs, nowUs);
         sampled = true;
     }
     if (nowUs >= nextDiskUs) {
-        sampleDisk(nowUs);
+        sampleDisk(nowUs, budget);
         nextDiskUs = advanceDeadline(nextDiskUs, config.diskIntervalMs, nowUs);
         sampled = true;
     }
     if (nowUs >= nextMemoryUs) {
-        const memory = safely(() => parseMemoryUsage(readers.memory.read()));
+        const memory = safely(() => parseMemoryUsage(readers.memory.read(budget)));
         if (memory !== null)
             metrics.memory = memory;
         nextMemoryUs = advanceDeadline(nextMemoryUs, config.memoryIntervalMs, nowUs);
@@ -128,7 +162,7 @@ function sample() {
     }
 
     if (sampled && nowUs - lastEmissionUs >= 1_000_000 / MAX_EMITS_PER_SECOND) {
-        const snapshot = JSON.stringify(systemSnapshot(metrics));
+        const snapshot = JSON.stringify(systemSnapshot(metrics, config.fields));
         if (snapshot !== lastSnapshot) {
             writeLine(snapshot);
             lastSnapshot = snapshot;
@@ -142,8 +176,10 @@ function sample() {
     }
 }
 
-function sampleFast(nowUs) {
-    const currentCpu = safely(() => parseCpuStat(readers.cpu.read()));
+function sampleFast(nowUs, budget) {
+    const currentCpu = safely(() => selectedFields.has('cpu')
+        ? parseCpuStat(readers.cpu.read(budget))
+        : null);
     if (cpuBaseline !== null && currentCpu !== null) {
         const usage = cpuUsage(cpuBaseline, currentCpu);
         if (usage !== null)
@@ -153,9 +189,10 @@ function sampleFast(nowUs) {
         cpuBaseline = currentCpu;
     }
 
-    const currentNetwork = safely(() => networkInterface === null
+    const currentNetwork = safely(() => !selectedFields.has('network') ||
+        networkInterface === null
         ? null
-        : parseNetworkCounters(readers.network.read(), networkInterface));
+        : parseNetworkCounters(readers.network.read(budget), networkInterface));
     if (networkBaseline !== null && currentNetwork !== null) {
         const rates = networkRates(
             networkBaseline,
@@ -174,10 +211,10 @@ function sampleFast(nowUs) {
     networkBaselineUs = nowUs;
 }
 
-function sampleDisk(nowUs) {
+function sampleDisk(nowUs, budget) {
     const current = safely(() => readers.disk === null
         ? null
-        : parseDiskIoMs(readers.disk.read()));
+        : parseDiskIoMs(readers.disk.read(budget)));
     if (diskBaseline !== null && current !== null) {
         const usage = diskUsage(diskBaseline, current, (nowUs - diskBaselineUs) / 1_000);
         if (usage !== null)
@@ -188,7 +225,7 @@ function sampleDisk(nowUs) {
 }
 
 function monitorResolutionChanges() {
-    if (config.networkInterface === 'auto') {
+    if (selectedFields.has('network') && config.networkInterface === 'auto') {
         try {
             Gio.DBus.system.signal_subscribe(
                 'org.freedesktop.NetworkManager',
@@ -210,7 +247,7 @@ function monitorResolutionChanges() {
             // The cached route fallback remains valid until process restart.
         }
     }
-    if (config.diskDevice === 'auto') {
+    if (selectedFields.has('disk') && config.diskDevice === 'auto') {
         try {
             const monitor = Gio.File.new_for_path('/proc/self/mountinfo').monitor_file(
                 Gio.FileMonitorFlags.NONE,
@@ -239,21 +276,39 @@ function loadConfig() {
         fastIntervalMs: 250,
         diskIntervalMs: 500,
         memoryIntervalMs: 1_000,
+        fields: ['cpu', 'memory', 'disk', 'network'],
         diskDevice: 'auto',
         networkInterface: 'auto',
     };
     let value = {};
     try {
-        const [, bytes] = GLib.file_get_contents('config.json');
-        value = JSON.parse(new TextDecoder().decode(bytes));
+        value = JSON.parse(readBoundedFile('config.json'));
     } catch (error) {
-        if (!error.matches?.(GLib.FileError, GLib.FileError.NOENT))
+        const missing = error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND) ||
+            error.matches?.(GLib.FileError, GLib.FileError.NOENT);
+        if (!missing)
             printerr(`[system-monitor] Ignoring invalid config.json: ${error.message}`);
     }
+    const allowed = new Set([
+        'fastIntervalMs',
+        'diskIntervalMs',
+        'memoryIntervalMs',
+        'fields',
+        'diskDevice',
+        'networkInterface',
+    ]);
+    const unknown = Object.keys(value).find(key => !allowed.has(key));
+    if (unknown !== undefined)
+        throw new Error(`Unknown config field: ${unknown}`);
     const result = {...defaults, ...value};
     requireRange(result.fastIntervalMs, 100, 2_000, 'fastIntervalMs');
     requireRange(result.diskIntervalMs, 100, 10_000, 'diskIntervalMs');
     requireRange(result.memoryIntervalMs, 100, 10_000, 'memoryIntervalMs');
+    if (!Array.isArray(result.fields) || result.fields.length === 0 ||
+        result.fields.length > 4 || new Set(result.fields).size !== result.fields.length ||
+        result.fields.some(field => !['cpu', 'memory', 'disk', 'network'].includes(field))) {
+        throw new Error('fields must contain unique CPU, memory, disk, or network names');
+    }
     for (const field of ['diskDevice', 'networkInterface']) {
         if (typeof result[field] !== 'string' || !/^(auto|[A-Za-z0-9_.:-]+)$/.test(result[field]))
             throw new Error(`Invalid ${field}`);
@@ -306,8 +361,7 @@ function dbusProperty(path, interfaceName, property) {
 
 function resolveRouteInterface() {
     try {
-        const [, bytes] = GLib.file_get_contents('/proc/net/route');
-        for (const line of new TextDecoder().decode(bytes).split('\n').slice(1)) {
+        for (const line of readBoundedFile('/proc/net/route').split('\n').slice(1)) {
             const fields = line.trim().split(/\s+/);
             if (fields.length >= 4 && fields[1] === '00000000' &&
                 (Number.parseInt(fields[3], 16) & 0x1) !== 0)
@@ -323,8 +377,7 @@ function resolveDiskDevice(configured) {
     if (configured !== 'auto')
         return configured;
     try {
-        const [, bytes] = GLib.file_get_contents('/proc/self/mountinfo');
-        const root = new TextDecoder().decode(bytes).split('\n').find(line => {
+        const root = readBoundedFile('/proc/self/mountinfo').split('\n').find(line => {
             const fields = line.split(' ');
             return fields[4] === '/';
         });
@@ -356,6 +409,19 @@ function safely(callback) {
 function requireRange(value, minimum, maximum, name) {
     if (!Number.isInteger(value) || value < minimum || value > maximum)
         throw new Error(`${name} must be from ${minimum} through ${maximum}`);
+}
+
+function readBoundedFile(path) {
+    const stream = Gio.File.new_for_path(path).read(null);
+    try {
+        const block = stream.read_bytes(MAX_FILE_BYTES + 1, null);
+        const bytes = new Uint8Array(block.get_data());
+        if (bytes.length > MAX_FILE_BYTES)
+            throw new Error(`${path} exceeds ${MAX_FILE_BYTES} bytes`);
+        return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
+    } finally {
+        stream.close(null);
+    }
 }
 
 function writeLine(value) {

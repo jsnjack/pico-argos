@@ -79,15 +79,48 @@ export function networkRates(previous, current, elapsedMs, fastIntervalMs) {
     return {receive: receive / seconds, transmit: transmit / seconds};
 }
 
-/** Formats one constant-width combined system label. */
-export function formatSystemLabel({cpu, memory, disk, receive, transmit}) {
-    return `cpu ${formatPercent(cpu)}% mem ${formatPercent(memory)}% ` +
-        `io ${formatPercent(disk)}% rx ${formatRate(receive)} tx ${formatRate(transmit)}`;
+const ALL_FIELDS = Object.freeze(['cpu', 'memory', 'disk', 'network']);
+
+/** Formats one constant-width combined system label for selected fields. */
+export function formatSystemLabel(
+    {cpu, memory, disk, receive, transmit}, fields = ALL_FIELDS) {
+    const selected = new Set(fields);
+    const parts = [];
+    if (selected.has('cpu'))
+        parts.push(`cpu ${formatPercent(cpu)}%`);
+    if (selected.has('memory'))
+        parts.push(`mem ${formatPercent(memory)}%`);
+    if (selected.has('disk'))
+        parts.push(`io ${formatPercent(disk)}%`);
+    if (selected.has('network'))
+        parts.push(`⏷ ${formatRate(receive)} ⏶ ${formatRate(transmit)}`);
+    return parts.join(' ');
 }
 
 /** Creates the public protocol snapshot for the combined indicator. */
-export function systemSnapshot(metrics) {
-    const text = formatSystemLabel(metrics);
+export function systemSnapshot(metrics, fields = ALL_FIELDS) {
+    const selected = new Set(fields);
+    const text = formatSystemLabel(metrics, fields);
+    const menu = [];
+    if (selected.has('cpu'))
+        menu.push({id: 'cpu', kind: 'label', text: `CPU utilization ${formatDetail(metrics.cpu)}`});
+    if (selected.has('memory')) {
+        menu.push({
+            id: 'memory',
+            kind: 'label',
+            text: `Memory utilization ${formatDetail(metrics.memory)}`,
+        });
+    }
+    if (selected.has('disk'))
+        menu.push({id: 'disk', kind: 'label', text: `Disk activity ${formatDetail(metrics.disk)}`});
+    if (selected.has('network')) {
+        menu.push({
+            id: 'network',
+            kind: 'label',
+            text: `Network ⏷ ${formatRate(metrics.receive).trim()} ` +
+                `⏶ ${formatRate(metrics.transmit).trim()}`,
+        });
+    }
     return {
         version: 1,
         type: 'snapshot',
@@ -98,12 +131,7 @@ export function systemSnapshot(metrics) {
             accessibleName: `System utilization: ${text}`,
             severity: 'normal',
         },
-        menu: [
-            {id: 'cpu', kind: 'label', text: `CPU utilization ${formatDetail(metrics.cpu)}`},
-            {id: 'memory', kind: 'label', text: `Memory utilization ${formatDetail(metrics.memory)}`},
-            {id: 'disk', kind: 'label', text: `Disk activity ${formatDetail(metrics.disk)}`},
-            {id: 'network', kind: 'label', text: `Network rx ${formatRate(metrics.receive).trim()} tx ${formatRate(metrics.transmit).trim()}`},
-        ],
+        menu,
     };
 }
 
@@ -115,24 +143,10 @@ function formatPercent(value) {
 
 function formatRate(value) {
     if (value === null || !Number.isFinite(value) || value < 0)
-        return '     --';
-    const units = ['B', 'K', 'M', 'G'];
-    let scaled = value;
-    let unit = 0;
-    while (scaled >= 1_000 && unit < units.length - 1) {
-        scaled /= 1_000;
-        unit++;
-    }
-    if (unit === units.length - 1)
-        scaled = Math.min(scaled, 999.9);
-    let number;
-    if (scaled < 10 && unit > 0)
-        number = scaled.toFixed(2);
-    else if (scaled < 1_000 && unit > 0)
-        number = scaled.toFixed(1);
-    else
-        number = String(Math.round(scaled));
-    return `${number}${units[unit]}`.padStart(7);
+        return '    -- KBs';
+    const megabytes = value >= 1_000_000;
+    const scaled = Math.min(value / (megabytes ? 1_000_000 : 1_000), 999.99);
+    return `${scaled.toFixed(2).padStart(6)} ${megabytes ? 'MBs' : 'KBs'}`;
 }
 
 function formatDetail(value) {

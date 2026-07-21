@@ -39,7 +39,7 @@ if (networkRates(currentNetwork, previousNetwork, 250, 250) !== null ||
 
 const metrics = {cpu: 12, memory: 47, disk: 0, receive: 123_400, transmit: 2_100_000};
 const label = formatSystemLabel(metrics);
-if (label !== 'cpu  12% mem  47% io   0% rx  123.4K tx   2.10M')
+if (label !== 'cpu  12% mem  47% io   0% ⏷ 123.40 KBs ⏶   2.10 MBs')
     throw new Error(`Unexpected fixed-width label: ${JSON.stringify(label)}`);
 for (const values of [
     metrics,
@@ -47,10 +47,14 @@ for (const values of [
     {cpu: 0, memory: 0, disk: 0, receive: 9_999, transmit: 99_999},
 ]) {
     const formatted = formatSystemLabel(values);
-    if (formatted.length !== 47)
+    if ([...formatted].length !== 51)
         throw new Error(`System label width changed: ${formatted.length} ${JSON.stringify(formatted)}`);
 }
 const snapshot = systemSnapshot(metrics);
-if (snapshot.panel.text.length !== 47 || snapshot.menu.length !== 4)
+if ([...snapshot.panel.text].length !== 51 || snapshot.menu.length !== 4)
     throw new Error('System protocol snapshot is not fixed-width and complete');
+const selected = systemSnapshot(metrics, ['cpu', 'network']);
+if (selected.panel.text !== 'cpu  12% ⏷ 123.40 KBs ⏶   2.10 MBs' ||
+    JSON.stringify(selected.menu.map(item => item.id)) !== '["cpu","network"]')
+    throw new Error('System field selection changed ordering or retained omitted metrics');
 print('ok - system monitor parses counters and formats fixed-width state');

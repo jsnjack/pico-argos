@@ -2,6 +2,7 @@
   "fastIntervalMs": 250,
   "diskIntervalMs": 500,
   "memoryIntervalMs": 1000,
+  "fields": ["cpu", "memory", "disk", "network"],
   "diskDevice": "auto",
   "networkInterface": "auto"
 }
