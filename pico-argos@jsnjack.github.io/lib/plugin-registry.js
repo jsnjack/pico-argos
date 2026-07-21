@@ -42,6 +42,7 @@ export class PluginRegistry {
         this._known = new Map();
         this._monitors = new Map();
         this._monitorSignals = new Map();
+        this._fileMonitors = new Map();
         this._debounceSources = new Map();
         this._reloadTokens = new Map();
         this._rootMonitor = null;
@@ -135,6 +136,13 @@ export class PluginRegistry {
         }
         this._monitors.clear();
         this._monitorSignals.clear();
+        for (const monitors of this._fileMonitors.values()) {
+            for (const {monitor, signalId} of monitors) {
+                monitor.disconnect(signalId);
+                monitor.cancel();
+            }
+        }
+        this._fileMonitors.clear();
         for (const sourceId of this._debounceSources.values())
             GLib.source_remove(sourceId);
         this._debounceSources.clear();
@@ -178,7 +186,7 @@ export class PluginRegistry {
             if (!executableInfo.get_attribute_boolean(Gio.FILE_ATTRIBUTE_ACCESS_CAN_EXECUTE))
                 throw new Error(`Plugin ${candidate.name} executable is not executable`);
             executableIdentity = fileIdentity(executableInfo);
-            watchedFiles.push(GLib.path_get_basename(manifest.command[0]));
+            watchedFiles.push(manifest.command[0]);
         }
         for (const argument of manifest.command.slice(1)) {
             if (!argument.startsWith('./'))
@@ -201,8 +209,7 @@ export class PluginRegistry {
                 info, this._userId, false, `Plugin ${candidate.name} local command file`);
             const relative = path.slice(directory.get_path().length + 1);
             localFileIdentities.push(`${relative}:${fileIdentity(info)}`);
-            if (!relative.includes('/'))
-                watchedFiles.push(relative);
+            watchedFiles.push(path);
         }
 
         return Object.freeze({
@@ -225,28 +232,49 @@ export class PluginRegistry {
     }
 
     _monitorPlugin(id) {
-        if (this._monitors.has(id))
-            return;
-        try {
-            const monitor = this.root.get_child(id).monitor_directory(
-                Gio.FileMonitorFlags.WATCH_MOVES,
-                this._cancellable);
-            const signalId = monitor.connect('changed', (_monitor, file, otherFile) => {
-                const names = [file?.get_basename(), otherFile?.get_basename()];
-                const plugin = this._known.get(id);
-                const watchedFiles = new Set(plugin?.watchedFiles ?? []);
-                if (names.includes('plugin.json') ||
-                    names.some(name => watchedFiles.has(name)))
-                    this._scheduleReload(id);
-            });
-            this._monitors.set(id, monitor);
-            this._monitorSignals.set(id, signalId);
-        } catch (_error) {
-            // A root monitor event will retry after an atomic directory move.
+        if (!this._monitors.has(id)) {
+            try {
+                const monitor = this.root.get_child(id).monitor_directory(
+                    Gio.FileMonitorFlags.WATCH_MOVES,
+                    this._cancellable);
+                const signalId = monitor.connect(
+                    'changed',
+                    (_monitor, file, otherFile) => {
+                        const names = [file?.get_basename(), otherFile?.get_basename()];
+                        if (names.includes('plugin.json'))
+                            this._scheduleReload(id);
+                    });
+                this._monitors.set(id, monitor);
+                this._monitorSignals.set(id, signalId);
+            } catch (_error) {
+                // A root monitor event will retry after an atomic directory move.
+            }
         }
+        this._monitorPluginFiles(id);
+    }
+
+    _monitorPluginFiles(id) {
+        this._unmonitorPluginFiles(id);
+        const monitors = [];
+        for (const path of this._known.get(id)?.watchedFiles ?? []) {
+            try {
+                const monitor = Gio.File.new_for_path(path).monitor_file(
+                    Gio.FileMonitorFlags.WATCH_MOVES,
+                    this._cancellable);
+                const signalId = monitor.connect(
+                    'changed',
+                    () => this._scheduleReload(id));
+                monitors.push({monitor, signalId});
+            } catch (_error) {
+                // Manifest revalidation reports a missing or invalid command file.
+            }
+        }
+        if (monitors.length > 0)
+            this._fileMonitors.set(id, monitors);
     }
 
     _unmonitorPlugin(id) {
+        this._unmonitorPluginFiles(id);
         const monitor = this._monitors.get(id);
         if (monitor === undefined)
             return;
@@ -254,6 +282,17 @@ export class PluginRegistry {
         monitor.cancel();
         this._monitors.delete(id);
         this._monitorSignals.delete(id);
+    }
+
+    _unmonitorPluginFiles(id) {
+        const monitors = this._fileMonitors.get(id);
+        if (monitors === undefined)
+            return;
+        for (const {monitor, signalId} of monitors) {
+            monitor.disconnect(signalId);
+            monitor.cancel();
+        }
+        this._fileMonitors.delete(id);
     }
 
     _scheduleReload(id) {

@@ -52,10 +52,12 @@ function deletePlugin(directory) {
 const later = createPlugin('later', {order: 20});
 const earlier = createPlugin('earlier', {order: 10});
 const interpreted = createPlugin('interpreted', {
-    command: ['gjs', '-m', './run.js'],
+    command: ['gjs', '-m', './src/run.js'],
     order: 10,
 });
-const interpretedSource = interpreted.get_child('run.js');
+const interpretedSourceDirectory = interpreted.get_child('src');
+interpretedSourceDirectory.make_directory(null);
+const interpretedSource = interpretedSourceDirectory.get_child('run.js');
 interpretedSource.replace_contents(
     '#!/usr/bin/env -S gjs -m\n',
     null,
@@ -174,6 +176,7 @@ executableRegistry.cancel();
 deletePlugin(later);
 deletePlugin(earlier);
 interpretedSource.delete(null);
+interpretedSourceDirectory.delete(null);
 deletePlugin(interpreted);
 deletePlugin(invalid);
 deletePlugin(ignored);
