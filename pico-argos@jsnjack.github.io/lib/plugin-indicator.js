@@ -352,7 +352,11 @@ export class PluginIndicator {
         if (reserve !== 0 && appearance === 'monospace') {
             const text = this._label.clutter_text;
             const layout = Pango.Layout.new(text.get_layout().get_context());
-            layout.set_font_description(text.get_font_description());
+            // Construct an owned description from the font name. Passing
+            // ClutterText's borrowed FontDescription into a temporary layout
+            // can alias native ownership in GJS and double-free it during GC.
+            layout.set_font_description(
+                Pango.FontDescription.from_string(text.get_font_name()));
             layout.set_text('0'.repeat(reserve), -1);
             const [naturalWidth] = layout.get_pixel_size();
             width = Math.ceil(naturalWidth);

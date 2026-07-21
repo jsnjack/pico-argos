@@ -84,6 +84,15 @@ jq -e '
     .diagnostics.phases["semantic-diff"].count > 0
 ' "$summary_file" >/dev/null
 
+gsettings set org.gnome.shell.extensions.pico-argos disabled-plugins "['smoke']"
+wait_for_summary '.runtime.plugins | length == 0'
+if pgrep -f "$plugin_dir/run" >/dev/null; then
+    echo 'Disabled plugin child survived its preferences toggle' >&2
+    exit 1
+fi
+gsettings set org.gnome.shell.extensions.pico-argos disabled-plugins "[]"
+wait_for_summary '.runtime.plugins | length == 1 and .[0].processState == "running"'
+
 gsettings set org.gnome.shell.extensions.pico-argos diagnostics-mode off
 wait_for_summary '.diagnostics.mode == "off"'
 gsettings set org.gnome.shell.extensions.pico-argos diagnostics-mode summary
@@ -178,7 +187,7 @@ if pgrep -f "$plugin_dir/run" >/dev/null; then
     exit 1
 fi
 
-if rg -q 'GNOME Shell-CRITICAL|Gjs-CRITICAL|Extension pico-argos.*ERROR|pico-argos-actor-test.*FAIL' \
+if rg -q 'GNOME Shell-CRITICAL|Gjs-CRITICAL|Extension pico-argos.*ERROR|pico-argos-actor-test.*FAIL|free\(\): invalid' \
     "$shell_log"; then
     cat "$shell_log" >&2
     exit 1
@@ -187,3 +196,7 @@ fi
 kill "$shell_pid"
 wait "$shell_pid" || true
 shell_pid=
+if rg -q 'free\(\): invalid' "$shell_log"; then
+    cat "$shell_log" >&2
+    exit 1
+fi
