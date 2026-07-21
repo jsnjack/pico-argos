@@ -225,25 +225,46 @@ output, rate breaches, liveness failure, or unexpected exit fail the run.
 
 ## Preserving look and behavior during migration
 
-Translate the original indicator, do not redesign it. Keep panel placement and
-order, refresh cadence, conditional visibility, labels, glyphs, link ordering,
-menu grouping, fixed-width padding, units, and accessible meaning. Use literal
-Unicode for Argos emoji names (`:robot:` → `🤖`) and GNOME symbolic icon
-names for `iconName`. Replace blank Argos lines with stable separators or
+Start by translating the original indicator without changing its behavior.
+Keep panel placement and order, refresh cadence, conditional visibility, data
+source, link destinations and grouping, fixed-width padding, units, and
+accessible meaning. Use literal Unicode when a glyph remains part of the
+design, and prefer GNOME symbolic icon names when polishing a status into a
+native Shell presentation. Replace blank Argos lines with stable separators or
 purposeful labels. Use `appearance: "monospace"` and an accurate
 `reserveTextChars` for fixed-width values. A combined plugin is acceptable when
-the specification requires it, but preserve the old tokens and visual rhythm.
+the specification requires it, but preserve the old tokens and visual rhythm
+as the default during that transition.
+
+After behavioral parity is covered by tests, presentation can be refined with
+explicit approval. For Fedora 44 and GNOME 50, the maintained reference style
+is deliberately restrained:
+
+- use icon-theme symbolic icons and inherited panel/menu colors;
+- keep icon-only states fully accessible and pair alert icons with a short
+  numeric count when useful;
+- use concise sentence-case menu labels, stable separators, and direct links
+  to the most actionable items;
+- hide genuinely inactive status instead of showing decorative all-clear text,
+  except where an always-visible state is part of the original workflow;
+- avoid custom backgrounds, borders, shadows, markup, and domain-specific CSS;
+- use the core warning/critical severity colors only for actionable thresholds;
+- cap detail lists and summarize onset, peak, or totals before raw entries.
+
+These choices let the Shell theme control spacing, contrast, symbolic-icon
+rendering, hover states, and light/dark/high-contrast behavior. Domain plugins
+should not try to reproduce GTK cards or invent a second panel theme.
 
 Do not change a legacy data source merely because another API is easier. These
 reference defaults are compatibility constraints:
 
-| Plugin | Required source/default | Presentation invariant |
+| Plugin | Required source/default | Maintained presentation |
 |---|---|---|
-| system monitor | Linux `/proc` and `/sys` counters | `cpu`, `mem`, `io`, down/up arrows, `KBs`/`MBs`, 9 px monospace |
-| Dependabot | GitHub Dependabot alerts API | hidden at zero; nonzero robot; `View Vulnerabilities` |
-| pull reviews | GitHub GraphQL search | hammer count, palm-tree all-clear, original five links and grouping |
-| VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; snowflake; `Connected to CC` |
-| weather | `https://weather.yauhen.cc/api/v1/glance` | center placement, temperature/rain dots/condition icon, original detail order |
+| system monitor | Linux `/proc` and `/sys` counters | legacy `cpu`/`mem`/`io`, arrows, `KBs`/`MBs`, and 9 px monospace remain the default; compact is opt-in |
+| Dependabot | GitHub Dependabot alerts API | hidden at zero; urgent-update symbolic icon and count; up to five direct alert links |
+| pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
+| VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; VPN symbolic icon; private country/city details with no public IP |
+| weather | `https://weather.yauhen.cc/api/v1/glance` | center placement, temperature/rain dots/condition icon, concise details, and bounded rain timing |
 
 The `weather.yauhen.cc` source is deliberate. **Do not replace, proxy, or add a
 fallback weather source without an explicit user request.** Fetch it once per

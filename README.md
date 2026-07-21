@@ -75,6 +75,15 @@ retained Linux counter sources from one persistent GJS process, uses actual
 monotonic elapsed time, and emits one fixed-width combined indicator. GitHub,
 VPN, and weather integrations follow the same public plugin protocol.
 
+The reference presentation follows GNOME 50 conventions: theme-provided
+symbolic icons, compact accessible panel state, bounded actionable menus, and
+no plugin-specific panel chrome. The system monitor keeps its exact legacy
+fixed-width presentation by default and offers the polished compact form as an
+opt-in. GitHub destinations, VPN and weather sources, placement, cadence, and
+conditional visibility remain migration-compatible. In particular, weather
+continues to use `https://weather.yauhen.cc/api/v1/glance` with no fallback or
+source substitution.
+
 Run the repository validation gate with:
 
 ```bash
