@@ -8,9 +8,9 @@ ESLINT := node_modules/.bin/eslint
 SCHEMAS := $(wildcard $(SRC_DIR)/schemas/*.gschema.xml)
 PACKAGE := $(DIST_DIR)/$(UUID).shell-extension.zip
 
-.PHONY: check spec-check format-check lint test schemas package package-check install standards clean
+.PHONY: check spec-check format-check lint test schemas package package-check integration-test install standards clean
 
-check: spec-check format-check lint test package-check
+check: spec-check format-check lint test package-check integration-test
 	@echo "==> make check: all green"
 
 spec-check:
@@ -57,18 +57,17 @@ schemas:
 		echo "==> schemas: no schemas yet"; \
 	fi
 
-package-check:
-	@if [[ -f "$(SRC_DIR)/metadata.json" ]]; then \
-		set -e; \
-		$(MAKE) package; \
-		test -s "$(BUILD_DIR)/$(UUID)/schemas/gschemas.compiled"; \
-		unzip -Z1 "$(PACKAGE)" | rg -q '^lib/extension-controller\.js$$'; \
-		unzip -Z1 "$(PACKAGE)" | rg -q '^prefs\.js$$'; \
-		unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/org\.gnome\.shell\.extensions\.pico-argos\.gschema\.xml$$'; \
-		! unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/gschemas\.compiled$$'; \
-		! unzip -Z1 "$(PACKAGE)" | rg -q '\.test\.js$$'; \
-		! unzip -Z1 "$(PACKAGE)" | rg -q '^plugins/'; \
-	else echo "==> package: extension source not present yet"; fi
+package-check: package
+	@test -s "$(BUILD_DIR)/$(UUID)/schemas/gschemas.compiled"
+	@unzip -Z1 "$(PACKAGE)" | rg -q '^lib/extension-controller\.js$$'
+	@unzip -Z1 "$(PACKAGE)" | rg -q '^prefs\.js$$'
+	@unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/org\.gnome\.shell\.extensions\.pico-argos\.gschema\.xml$$'
+	@! unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/gschemas\.compiled$$'
+	@! unzip -Z1 "$(PACKAGE)" | rg -q '\.test\.js$$'
+	@! unzip -Z1 "$(PACKAGE)" | rg -q '^plugins/'
+
+integration-test: package
+	@tests/integration/nested-shell.sh
 
 package: schemas
 	@mkdir -p "$(DIST_DIR)"

@@ -77,5 +77,11 @@ npm install
 make check
 ```
 
+`make check` includes deterministic GJS tests, package-content assertions, and
+a GNOME 50 nested-Wayland integration run. The nested run exercises production
+enable/disable, stream teardown, settings, manifest and executable replacement,
+trace export, preferences startup, and the actor-mutation assertions from the
+performance contract.
+
 Build the installable GNOME Shell 50 package with `make package`. Use
 `make install` only when an explicit local installation is intended.
