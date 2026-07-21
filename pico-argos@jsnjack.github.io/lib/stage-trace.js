@@ -35,8 +35,23 @@ export class StageTrace {
         this._stage = stage;
         this._clock = clock;
         this._diagnostics = diagnostics;
-        this._signalExists = dependencies.signalExists ?? (name =>
-            GObject.signal_lookup(name, stage.constructor.$gtype) !== 0);
+        this._signalSupported = dependencies.signalSupported ?? (name => {
+            const signalId = GObject.signal_lookup(
+                name,
+                stage.constructor.$gtype);
+            if (signalId === 0)
+                return false;
+
+            // GNOME 50 stage signals include either a boxed ClutterFrame or a
+            // raw gpointer. Connecting them from GJS creates borrowed native
+            // wrappers before our callback is entered; the raw pointer cannot
+            // be converted at all and the boxed frame has proved unsafe across
+            // a later GC. Accept object-only signal parameters. Tracing is
+            // explicitly best-effort and must never destabilize the compositor.
+            const query = GObject.signal_query(signalId);
+            return query !== null && query.param_types.every(type =>
+                GObject.type_is_a(type, GObject.TYPE_OBJECT));
+        });
         this._scheduleTimeout = dependencies.scheduleTimeout ?? (callback =>
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, ARM_TIMEOUT_MS, callback));
         this._removeSource = dependencies.removeSource ?? (sourceId =>
@@ -58,7 +73,7 @@ export class StageTrace {
         this._prepareViews();
 
         for (const signal of SIGNALS) {
-            if (!this._signalExists(signal.name))
+            if (!this._signalSupported(signal.name))
                 continue;
 
             const signalId = this._stage.connect(

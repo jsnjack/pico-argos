@@ -56,7 +56,7 @@ const clock = {
 let timeoutCallback = null;
 const removedSources = [];
 const trace = new StageTrace(stage, clock, diagnostics, {
-    signalExists: name => name === 'before-update' || name === 'presented',
+    signalSupported: name => name === 'before-update' || name === 'presented',
     scheduleTimeout: callback => {
         timeoutCallback = callback;
         return 42;
