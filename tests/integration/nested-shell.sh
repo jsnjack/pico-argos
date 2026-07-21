@@ -8,8 +8,8 @@ uuid=pico-argos@jsnjack.github.io
 actor_uuid=pico-argos-actor-test@jsnjack.github.io
 package="$repo_root/dist/$uuid.shell-extension.zip"
 
-for required in dbus-run-session gdbus gjs glib-compile-schemas gnome-extensions \
-    gnome-shell gsettings jq pgrep rg unzip; do
+for required in cc dbus-run-session gdbus gjs glib-compile-schemas gnome-extensions \
+    gnome-shell gsettings jq pgrep pkg-config rg unzip wayland-scanner; do
     if ! command -v "$required" >/dev/null 2>&1; then
         echo "Missing required integration command: $required" >&2
         exit 1
@@ -32,6 +32,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
+presentation_client="$test_root/presentation-client"
+"$repo_root/tests/performance/build-presentation-client.sh" "$presentation_client"
+
 extension_dir="$test_root/data/gnome-shell/extensions/$uuid"
 actor_dir="$test_root/data/gnome-shell/extensions/$actor_uuid"
 plugin_dir="$test_root/config/pico-argos/plugins/smoke"
@@ -52,6 +55,7 @@ cp "$repo_root/pico-argos@jsnjack.github.io/lib/trace.js" "$actor_dir/lib/"
 
 export PICO_ARGOS_TEST_ROOT=$test_root
 export PICO_ARGOS_REPO_ROOT=$repo_root
+export PICO_ARGOS_PRESENTATION_CLIENT=$presentation_client
 dbus-run-session -- "$repo_root/tests/integration/nested-session.sh"
 
 echo "ok - nested GNOME Shell lifecycle, reload, diagnostics, preferences, and actors"

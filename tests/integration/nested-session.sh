@@ -11,6 +11,7 @@ plugin_dir="$test_root/config/pico-argos/plugins/smoke"
 shell_log="$test_root/shell.log"
 prefs_log="$test_root/preferences.log"
 summary_file="$test_root/summary.json"
+presentation_file="$test_root/presentation.ndjson"
 export XDG_CONFIG_HOME="$test_root/config"
 export XDG_CACHE_HOME="$test_root/cache"
 export XDG_DATA_HOME="$test_root/data"
@@ -66,6 +67,20 @@ done
 if ! kill -0 "$shell_pid" 2>/dev/null; then
     echo 'Nested GNOME Shell exited during startup' >&2
     cat "$shell_log" >&2
+    exit 1
+fi
+
+WAYLAND_DISPLAY=pico-argos-integration \
+    "$PICO_ARGOS_PRESENTATION_CLIENT" 2 >"$presentation_file"
+if ! jq -s -e '
+    (map(select(.type == "environment")) | length) == 1 and
+    (map(select(.type == "presented")) | length) >= 60 and
+    (map(select(.type == "presented" and
+        .refreshNanoseconds >= 16000000 and .refreshNanoseconds <= 17000000)) |
+        length) >= 60
+' "$presentation_file" >/dev/null; then
+    echo 'Continuous Wayland presentation feedback capture failed' >&2
+    tail -20 "$presentation_file" >&2
     exit 1
 fi
 
