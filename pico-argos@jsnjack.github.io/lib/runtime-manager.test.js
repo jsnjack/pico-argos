@@ -161,6 +161,16 @@ await settle();
 if (runtime.snapshot().plugins[0].lastFailure !== null)
     throw new Error('A hidden panel incorrectly violated reserveTextChars');
 
+runtime.setPlugin(plugin({refreshOnOpen: false}));
+if (runtime.refreshOnOpen('fixture'))
+    throw new Error('Runtime bypassed the manifest menu-open refresh policy');
+oneShotRunner.outputs.push(raw('manual'));
+if (!runtime.refreshNow('fixture'))
+    throw new Error('Runtime rejected an explicit one-shot refresh');
+await settle();
+if (runtime.snapshot().plugins[0].lastFailure !== null)
+    throw new Error('Explicit one-shot refresh did not recover valid state');
+
 runtime.removePlugin('fixture');
 runtime.destroy();
 if (JSON.stringify(removed) !== JSON.stringify(['fixture']))

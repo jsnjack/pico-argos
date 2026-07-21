@@ -22,6 +22,7 @@ export class OneShotScheduler {
         this._source = null;
         this._started = false;
         this._generation = 0;
+        this._lastDispatched = new Map();
     }
 
     /** Registers or replaces one normalized one-shot manifest. */
@@ -74,6 +75,7 @@ export class OneShotScheduler {
         this.stop();
         this._active = null;
         this._records.clear();
+        this._lastDispatched.clear();
         this._run = null;
         this._onEvent = null;
         this._onPhase = null;
@@ -84,7 +86,18 @@ export class OneShotScheduler {
         const record = this._records.get(pluginId);
         if (!this._started || record === undefined || !record.manifest.refreshOnOpen)
             return false;
-        this._enqueue(record, PRIORITY_REFRESH, this._clock.nowUs());
+        this._enqueue(record, PRIORITY_REFRESH, this._clock.nowUs(), 'refresh');
+        this._pump();
+        this._arm();
+        return true;
+    }
+
+    /** Coalesces one explicit user refresh regardless of open-refresh policy. */
+    requestManual(pluginId) {
+        const record = this._records.get(pluginId);
+        if (!this._started || record === undefined)
+            return false;
+        this._enqueue(record, PRIORITY_REFRESH, this._clock.nowUs(), 'manual');
         this._pump();
         this._arm();
         return true;
@@ -104,9 +117,7 @@ export class OneShotScheduler {
                 id: record.manifest.id,
                 nextDueUs: record.nextDueUs,
                 pending: record.pending === null ? null : {
-                    reason: record.pending.priority === PRIORITY_REFRESH
-                        ? 'refresh'
-                        : 'periodic',
+                    reason: record.pending.reason,
                     deadlineUs: record.pending.deadlineUs,
                 },
                 running: record.running,
@@ -147,7 +158,7 @@ export class OneShotScheduler {
                     count: occurrences,
                 });
             } else {
-                this._enqueue(record, PRIORITY_PERIODIC, deadlineUs);
+                this._enqueue(record, PRIORITY_PERIODIC, deadlineUs, 'periodic');
                 if (occurrences > 1) {
                     record.skipped += occurrences - 1;
                     this._onEvent?.({
@@ -164,13 +175,16 @@ export class OneShotScheduler {
         this._arm();
     }
 
-    _enqueue(record, priority, deadlineUs) {
+    _enqueue(record, priority, deadlineUs, reason) {
         if (record.pending === null || priority > record.pending.priority) {
-            record.pending = {priority, deadlineUs};
+            record.pending = {priority, deadlineUs, reason};
             return;
         }
-        if (priority === record.pending.priority)
+        if (priority === record.pending.priority) {
             record.pending.deadlineUs = Math.min(record.pending.deadlineUs, deadlineUs);
+            if (reason === 'refresh')
+                record.pending.reason = reason;
+        }
     }
 
     _pump() {
@@ -182,22 +196,30 @@ export class OneShotScheduler {
         if (candidates.length === 0)
             return;
 
-        const record = candidates[0];
+        const priority = candidates[0].pending.priority;
+        const samePriority = candidates.filter(candidate =>
+            candidate.pending.priority === priority);
+        const lastDispatched = this._lastDispatched.get(priority);
+        const record = samePriority.length > 1
+            ? samePriority.find(candidate => candidate.manifest.id !== lastDispatched) ??
+                samePriority[0]
+            : samePriority[0];
         const token = record.pending;
         record.pending = null;
         record.running = true;
         this._active = record.manifest.id;
+        this._lastDispatched.set(priority, record.manifest.id);
         const generation = this._generation;
         this._onEvent?.({
             kind: 'started',
             pluginId: record.manifest.id,
-            reason: token.priority === PRIORITY_REFRESH ? 'refresh' : 'periodic',
+            reason: token.reason,
             deadlineUs: token.deadlineUs,
         });
 
         Promise.resolve().then(() => this._run(record.manifest, {
-            reason: token.priority === PRIORITY_REFRESH ? 'refresh' : 'periodic',
-            menuOpen: token.priority === PRIORITY_REFRESH,
+            reason: token.reason,
+            menuOpen: token.reason === 'refresh',
             deadlineUs: token.deadlineUs,
         })).catch(error => {
             this._onEvent?.({kind: 'run-error', pluginId: record.manifest.id, error});

@@ -2,6 +2,7 @@
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -38,6 +39,7 @@ export class PluginIndicator {
         this._menuEntries = new Map();
         this._menuSignalId = 0;
         this._footerSignalId = 0;
+        this._refreshSignalId = 0;
         this._restartSignalId = 0;
         this._ownedActorCount = 0;
         this._panel = null;
@@ -88,21 +90,8 @@ export class PluginIndicator {
             this._applyReservedWidth(this._panel.appearance);
         if (this._menuBuilt) {
             const isStream = plugin.manifest.mode === 'stream';
-            this._write(
-                this._restartItem,
-                'visible',
-                isStream,
-                'menu-property-writes');
-            this._write(
-                this._restartItem,
-                'reactive',
-                isStream,
-                'menu-property-writes');
-            this._write(
-                this._restartItem,
-                'can_focus',
-                isStream,
-                'menu-property-writes');
+            this._setActionState(this._refreshItem, !isStream);
+            this._setActionState(this._restartItem, isStream);
         }
         if (this._panel !== null)
             this._applyStyle(this._panel.appearance, this._panel.severity, this._stale);
@@ -138,6 +127,10 @@ export class PluginIndicator {
             this._footerItem.disconnect(this._footerSignalId);
             this._footerSignalId = 0;
         }
+        if (this._refreshSignalId !== 0) {
+            this._refreshItem.disconnect(this._refreshSignalId);
+            this._refreshSignalId = 0;
+        }
         if (this._restartSignalId !== 0) {
             this._restartItem.disconnect(this._restartSignalId);
             this._restartSignalId = 0;
@@ -150,6 +143,7 @@ export class PluginIndicator {
         this._icon = null;
         this._label = null;
         this._footerItem = null;
+        this._refreshItem = null;
         this._restartItem = null;
         this._reservedWidthKey = null;
         this._actions = null;
@@ -272,17 +266,28 @@ export class PluginIndicator {
         this._footerSeparator = new PopupMenu.PopupSeparatorMenuItem();
         this._recordCreation();
         this.actor.menu.addMenuItem(this._footerSeparator);
-        this._restartItem = new PopupMenu.PopupMenuItem('Restart stream', {
-            reactive: this.plugin.manifest.mode === 'stream',
-            can_focus: this.plugin.manifest.mode === 'stream',
+        const isStream = this.plugin.manifest.mode === 'stream';
+        this._refreshItem = new PopupMenu.PopupMenuItem('Refresh now', {
+            reactive: !isStream,
+            can_focus: !isStream,
         });
-        this._restartItem.visible = this.plugin.manifest.mode === 'stream';
+        this._refreshItem.visible = !isStream;
+        this._recordCreation();
+        this._refreshSignalId = this._refreshItem.connect(
+            'activate',
+            () => this._actions.refreshNow(this.plugin.id));
+        this.actor.menu.addMenuItem(this._refreshItem);
+        this._restartItem = new PopupMenu.PopupMenuItem('Restart plugin', {
+            reactive: isStream,
+            can_focus: isStream,
+        });
+        this._restartItem.visible = isStream;
         this._recordCreation();
         this._restartSignalId = this._restartItem.connect(
             'activate',
             () => this._actions.restartStream(this.plugin.id));
         this.actor.menu.addMenuItem(this._restartItem);
-        this._footerItem = new PopupMenu.PopupMenuItem('Open pico-argos Preferences');
+        this._footerItem = new PopupMenu.PopupMenuItem('Extension settings');
         this._recordCreation();
         this._footerSignalId = this._footerItem.connect(
             'activate',
@@ -309,7 +314,9 @@ export class PluginIndicator {
                     try {
                         Gio.AppInfo.launch_default_for_uri(current.uri, null);
                     } catch (error) {
-                        console.error(`[pico-argos] Opening link failed: ${error.message}`);
+                        console.error(
+                            `[pico-argos] Opening link for ${this.plugin.id} failed ` +
+                            `(${error.domain ?? 'unknown'}:${error.code ?? 'unknown'})`);
                     }
                 });
             }
@@ -343,15 +350,22 @@ export class PluginIndicator {
             return;
         let width = -1;
         if (reserve !== 0 && appearance === 'monospace') {
-            const original = this._label.text;
-            this._label.text = '0'.repeat(reserve);
-            const [, naturalWidth] = this._label.get_preferred_width(-1);
-            this._label.text = original;
+            const text = this._label.clutter_text;
+            const layout = Pango.Layout.new(text.get_layout().get_context());
+            layout.set_font_description(text.get_font_description());
+            layout.set_text('0'.repeat(reserve), -1);
+            const [naturalWidth] = layout.get_pixel_size();
             width = Math.ceil(naturalWidth);
         }
         if (this._label.width !== width)
             this._label.width = width;
         this._reservedWidthKey = key;
+    }
+
+    _setActionState(item, active) {
+        this._write(item, 'visible', active, 'menu-property-writes');
+        this._write(item, 'reactive', active, 'menu-property-writes');
+        this._write(item, 'can_focus', active, 'menu-property-writes');
     }
 
     _write(target, property, value, mutation) {

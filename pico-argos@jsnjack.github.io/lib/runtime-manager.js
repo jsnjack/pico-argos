@@ -171,6 +171,11 @@ export class RuntimeManager {
         return this._oneShotScheduler.requestRefresh(pluginId);
     }
 
+    /** Requests one explicit user-initiated one-shot refresh. */
+    refreshNow(pluginId) {
+        return this._oneShotScheduler.requestManual(pluginId);
+    }
+
     /** Explicitly clears a stream lockout and restarts its direct child. */
     restartStream(pluginId) {
         return this._streamSupervisor.restart(pluginId);

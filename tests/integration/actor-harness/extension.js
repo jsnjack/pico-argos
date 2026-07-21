@@ -35,6 +35,7 @@ export default class ActorHarnessExtension extends Extension {
         this._diagnostics = new Diagnostics();
         const actions = {
             refreshOnOpen() {},
+            refreshNow() {},
             restartStream() {},
             openPreferences() {},
         };
@@ -73,7 +74,7 @@ export default class ActorHarnessExtension extends Extension {
             'Closed menu created actors before first open');
         this._indicator._ensureMenu();
         const opened = mutations(this._diagnostics);
-        assert(opened['actor-creations'] === 9,
+        assert(opened['actor-creations'] === 10,
             'First menu build did not create its bounded retained actors');
 
         const latest = presentation('09999', baseMenu());

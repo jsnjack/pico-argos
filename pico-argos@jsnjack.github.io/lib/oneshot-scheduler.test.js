@@ -110,4 +110,37 @@ if (timer.sources.size !== 0)
 if (scheduler.snapshot().plugins.length !== 0 ||
     scheduler.snapshot().activePluginId !== null)
     throw new Error('Scheduler destroy retained plugin state');
+
+const manualTimer = new FakeTimer();
+const manualStarts = [];
+const manualCompletions = [];
+const manualScheduler = new OneShotScheduler({
+    clock: new FakeClock(),
+    timer: manualTimer,
+    run: (plugin, request) => {
+        manualStarts.push({id: plugin.id, ...request});
+        return new Promise(resolve => manualCompletions.push(resolve));
+    },
+});
+manualScheduler.setPlugin({...manifest('manual-alpha'), refreshOnOpen: false});
+manualScheduler.setPlugin({...manifest('manual-beta'), refreshOnOpen: false});
+manualScheduler.start();
+if (manualScheduler.requestRefresh('manual-alpha'))
+    throw new Error('Menu-open refresh bypassed a disabled manifest policy');
+if (!manualScheduler.requestManual('manual-alpha'))
+    throw new Error('Explicit refresh was not accepted');
+await settle();
+manualScheduler.requestManual('manual-alpha');
+manualScheduler.requestManual('manual-beta');
+manualCompletions.shift()();
+await settle();
+if (manualStarts[0].menuOpen || manualStarts[1].id !== 'manual-beta')
+    throw new Error('Explicit refresh lost menu state or starved pending peer work');
+manualCompletions.shift()();
+await settle();
+if (manualStarts[2].id !== 'manual-alpha')
+    throw new Error('Coalesced explicit refresh did not run after its pending peer');
+manualCompletions.shift()();
+await settle();
+manualScheduler.destroy();
 print('ok - one-shot scheduler phases deadlines and serializes bounded work');

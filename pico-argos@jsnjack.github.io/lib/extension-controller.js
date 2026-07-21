@@ -43,6 +43,7 @@ export class ExtensionController {
             this._diagnostics,
             {
                 refreshOnOpen: pluginId => this._runtime?.refreshOnOpen(pluginId),
+                refreshNow: pluginId => this._runtime?.refreshNow(pluginId),
                 restartStream: pluginId => this._runtime?.restartStream(pluginId),
                 openPreferences: () => this._extension.openPreferences(),
             });
