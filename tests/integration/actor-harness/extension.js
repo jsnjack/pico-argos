@@ -2,6 +2,7 @@
 
 import GLib from 'gi://GLib';
 
+import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
@@ -27,8 +28,14 @@ export default class ActorHarnessExtension extends Extension {
         this._secondary = null;
         this._indicator?.destroy();
         this._indicator = null;
+        // Closing a menu is not fully synchronous even with PopupAnimation.NONE;
+        // destroying it here, well after _runAssertions closed it, gives any
+        // deferred BoxPointer teardown time to finish first.
+        this._footerCheck?.destroy();
+        this._footerCheck = null;
         delete Main.panel.statusArea[TEST_ROLE];
         delete Main.panel.statusArea[`${TEST_ROLE}-secondary`];
+        delete Main.panel.statusArea[`${TEST_ROLE}-footer-check`];
     }
 
     _runAssertions() {
@@ -48,11 +55,14 @@ export default class ActorHarnessExtension extends Extension {
         Main.panel.addToStatusArea(TEST_ROLE, this._indicator.actor, 0, 'right');
         this._indicator.attach();
 
+        this._assertMenuOpensBeforeAnyContent(actions);
+
         const initial = presentation('00000', baseMenu());
         this._indicator.applyPresentation(initial);
         const initialized = mutations(this._diagnostics);
-        assert(initialized['actor-creations'] === 4,
-            'Panel initialization did not create exactly four owned actors');
+        assert(initialized['actor-creations'] === 8,
+            'Panel initialization did not create exactly eight owned actors ' +
+            '(four persistent leaves plus the four eagerly built footer items)');
 
         for (let index = 0; index < 10_000; index++)
             this._indicator.applyPresentation(initial);
@@ -70,8 +80,8 @@ export default class ActorHarnessExtension extends Extension {
             changed['actor-destructions'] === initialized['actor-destructions'],
         'Changing text created or destroyed an actor');
 
-        assert(changed['actor-creations'] === 4,
-            'Closed menu created actors before first open');
+        assert(changed['actor-creations'] === 8,
+            'Closed menu created actors beyond the eagerly built footer before first open');
         this._indicator._ensureMenu();
         const opened = mutations(this._diagnostics);
         assert(opened['actor-creations'] === 10,
@@ -126,6 +136,35 @@ export default class ActorHarnessExtension extends Extension {
             mutations(this._diagnostics),
             beforeUnrelatedApply,
             'Removing another plugin mutated the retained indicator');
+    }
+
+    /**
+     * Regression test for a real bug: GNOME Shell's PopupMenu silently
+     * refuses to open (isOpen stays false, no error) when its box has zero
+     * children. A plugin indicator whose menu content is built only on first
+     * open therefore had a menu that could never open by any means,
+     * including clicking it or calling menu.toggle() directly. Verifies the
+     * eagerly built footer keeps the box non-empty from attach onward, using
+     * a disposable indicator so it does not disturb the primary indicator's
+     * own open-on-first-use assertions below.
+     */
+    _assertMenuOpensBeforeAnyContent(actions) {
+        const plugin = fixturePlugin('actor-footer-check', 30);
+        this._footerCheck = new PluginIndicator(
+            plugin,
+            {nowUs: () => GLib.get_monotonic_time()},
+            new Diagnostics(),
+            actions);
+        Main.panel.addToStatusArea(
+            `${TEST_ROLE}-footer-check`, this._footerCheck.actor, 2, 'right');
+        this._footerCheck.attach();
+        assert(this._footerCheck.actor.menu.box.get_n_children() > 0,
+            'Menu box is empty before any content arrives; PopupMenu.open() ' +
+            'would silently refuse to open it');
+        this._footerCheck.actor.menu.toggle();
+        assert(this._footerCheck.actor.menu.isOpen === true,
+            'menu.toggle() did not actually open the menu before any content arrived');
+        this._footerCheck.actor.menu.close(BoxPointer.PopupAnimation.NONE);
     }
 }
 

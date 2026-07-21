@@ -5,6 +5,7 @@ import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
+import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -35,6 +36,7 @@ export class PluginIndicator {
         this._diagnostics = diagnostics;
         this._actions = actions;
         this._menuBuilt = false;
+        this._footerBuilt = false;
         this._menuModels = Object.freeze([]);
         this._menuEntries = new Map();
         this._menuSignalId = 0;
@@ -88,7 +90,7 @@ export class PluginIndicator {
         this.plugin = plugin;
         if (this._attached && this._panel !== null)
             this._applyReservedWidth(this._panel.appearance);
-        if (this._menuBuilt) {
+        if (this._footerBuilt) {
             const isStream = plugin.manifest.mode === 'stream';
             this._setActionState(this._refreshItem, !isStream);
             this._setActionState(this._restartItem, isStream);
@@ -100,6 +102,7 @@ export class PluginIndicator {
     /** Applies theme-dependent setup only after the actor enters the stage. */
     attach() {
         this._attached = true;
+        this._ensureFooter();
         if (this._panel !== null)
             this._applyReservedWidth(this._panel.appearance);
     }
@@ -135,6 +138,8 @@ export class PluginIndicator {
             this._restartItem.disconnect(this._restartSignalId);
             this._restartSignalId = 0;
         }
+        if (this.actor.menu.isOpen)
+            this.actor.menu.close(BoxPointer.PopupAnimation.NONE);
         this.actor.destroy();
         this._diagnostics.recordMutation('actor-destructions', this._ownedActorCount);
         this._ownedActorCount = 0;
@@ -256,13 +261,16 @@ export class PluginIndicator {
         });
     }
 
-    _ensureMenu() {
-        if (this._menuBuilt)
+    /**
+     * Creates the fixed separator/action items eagerly, on attach, so the
+     * menu's box is never empty. GNOME Shell's PopupMenu silently refuses to
+     * open an empty menu, so leaving these entirely to the first open would
+     * make the menu permanently unopenable.
+     */
+    _ensureFooter() {
+        if (this._footerBuilt)
             return;
-        const startedUs = this._clock.nowUs();
-        this._menuBuilt = true;
-        this._menuModels.forEach((model, index) => this._createEntry(model, index));
-
+        this._footerBuilt = true;
         this._footerSeparator = new PopupMenu.PopupSeparatorMenuItem();
         this._recordCreation();
         this.actor.menu.addMenuItem(this._footerSeparator);
@@ -293,6 +301,15 @@ export class PluginIndicator {
             'activate',
             () => this._actions.openPreferences());
         this.actor.menu.addMenuItem(this._footerItem);
+    }
+
+    /** Lazily creates plugin-provided menu entries only on first open. */
+    _ensureMenu() {
+        if (this._menuBuilt)
+            return;
+        const startedUs = this._clock.nowUs();
+        this._menuBuilt = true;
+        this._menuModels.forEach((model, index) => this._createEntry(model, index));
         this._diagnostics.recordDuration('menu-build', this._clock.nowUs() - startedUs);
     }
 

@@ -61,7 +61,10 @@ The following invariants are mandatory:
 2. Normal refreshes create and destroy no UI GObjects or Clutter actors.
 3. Panel actors are created once at enable time and retained until the plugin
    is removed or the extension is disabled.
-4. Menu actors are created lazily on first open and subsequently updated by key.
+4. A fixed, bounded set of separator/action menu items is created eagerly on
+   attach so the menu is never empty; GNOME Shell silently refuses to open an
+   empty menu. Plugin-provided menu content actors remain lazy: created on
+   first open and subsequently updated by key.
 5. No runtime callback performs synchronous file, network, or DNS
    I/O.
 6. No user plugin may provide unbounded input to GNOME Shell.
@@ -805,8 +808,11 @@ for periodic data changes.
 ### 10.4 Menus
 
 - Menu snapshots are retained as plain data while closed.
-- No menu actors are created until first open.
-- After first open, actors are retained and keyed by item ID.
+- The fixed separator and `Refresh now`/`Restart plugin`/`Extension settings`
+  items are created once, on attach, so the menu box is never empty; an
+  empty `PopupMenu` cannot be opened by any means, including a real click.
+- No plugin-provided menu content actors are created until first open.
+- After first open, plugin-provided actors are retained and keyed by item ID.
 - Opening applies the latest snapshot before display.
 - Opening never waits for a `refreshOnOpen` execution. It displays the cached
   valid snapshot immediately and applies the eventual result asynchronously.
@@ -814,7 +820,6 @@ for periodic data changes.
 - Reordering moves existing actors; it does not recreate them.
 - Removed item actors are destroyed only when the semantic item is actually
   removed.
-- The permanent diagnostics/edit affordances are created once, not per refresh.
 
 ## 11. Plugin Directory Monitoring
 
@@ -1192,7 +1197,10 @@ Mutation counters are assertions:
 
 - 10,000 identical refreshes produce zero property writes after initialization.
 - 10,000 changing text refreshes produce no actor creation or destruction.
-- Closed menus produce no menu actors before first open.
+- Closed menus produce no plugin-provided menu content actors before first
+  open, beyond the fixed footer items created eagerly on attach.
+- A menu can actually be opened (`menu.isOpen` becomes true) before any
+  plugin content has ever arrived, proving its box is never empty.
 - Reopening an unchanged menu produces no mutation.
 - Updating one menu label changes one existing label property.
 - Adding/removing one plugin does not mutate other plugins.

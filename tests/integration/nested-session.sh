@@ -87,7 +87,7 @@ fi
 gnome-extensions enable "$uuid"
 wait_for_summary '.runtime.plugins | length == 1 and .[0].processState == "running"'
 jq -e '
-    .diagnostics.mutations["actor-creations"] == 4 and
+    .diagnostics.mutations["actor-creations"] == 8 and
     .diagnostics.mutations["actor-destructions"] == 0 and
     .diagnostics.mutations["menu-property-writes"] == 0 and
     .runtime.children.current == 1 and
