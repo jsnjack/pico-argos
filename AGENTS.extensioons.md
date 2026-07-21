@@ -58,7 +58,10 @@ cp -R plugins/weather "$plugin_root/weather"
 chmod -R go-w "$plugin_root/weather"
 ```
 
-The registry creates the root when needed, loads at most 16 plugins, and rejects
+The checked-in reference `run.js` files are executable and copied with that
+mode. Their manifests still use the specification's explicit
+`["gjs", "-m", "./run.js"]` argv. The registry creates the root when needed,
+loads at most 16 plugins, and rejects
 plugin roots, directories, manifests, or directly executed files that are not
 owned by the current user or are group/world writable. A direct `./run` needs
 its executable bit; an interpreter command such as

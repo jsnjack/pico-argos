@@ -163,6 +163,8 @@ export class PluginRegistry {
         const manifest = parseManifest(raw, directory.get_path(), candidate.name);
 
         let executableIdentity = null;
+        const watchedFiles = [];
+        const localFileIdentities = [];
         if (manifest.command[0].includes('/')) {
             const executable = Gio.File.new_for_path(manifest.command[0]);
             const executableInfo = await queryInfo(
@@ -171,12 +173,32 @@ export class PluginRegistry {
                 executableInfo, this._userId, false, `Plugin ${candidate.name} executable`);
             if (!executableInfo.get_attribute_boolean(Gio.FILE_ATTRIBUTE_ACCESS_CAN_EXECUTE))
                 throw new Error(`Plugin ${candidate.name} executable is not executable`);
-            executableIdentity = [
-                executableInfo.get_attribute_uint64(Gio.FILE_ATTRIBUTE_UNIX_INODE),
-                executableInfo.get_size(),
-                executableInfo.get_attribute_uint64(Gio.FILE_ATTRIBUTE_TIME_MODIFIED),
-                executableInfo.get_attribute_uint32(Gio.FILE_ATTRIBUTE_TIME_MODIFIED_USEC),
-            ].join(':');
+            executableIdentity = fileIdentity(executableInfo);
+            watchedFiles.push(GLib.path_get_basename(manifest.command[0]));
+        }
+        for (const argument of manifest.command.slice(1)) {
+            if (!argument.startsWith('./'))
+                continue;
+            const path = GLib.canonicalize_filename(argument, directory.get_path());
+            if (!path.startsWith(`${directory.get_path()}/`))
+                continue;
+            let info;
+            try {
+                info = await queryInfo(
+                    Gio.File.new_for_path(path), SECURITY_ATTRIBUTES, this._cancellable);
+            } catch (error) {
+                if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND))
+                    continue;
+                throw error;
+            }
+            if (info.get_file_type() !== Gio.FileType.REGULAR)
+                continue;
+            validateOwnedFile(
+                info, this._userId, false, `Plugin ${candidate.name} local command file`);
+            const relative = path.slice(directory.get_path().length + 1);
+            localFileIdentities.push(`${relative}:${fileIdentity(info)}`);
+            if (!relative.includes('/'))
+                watchedFiles.push(relative);
         }
 
         return Object.freeze({
@@ -184,6 +206,8 @@ export class PluginRegistry {
             directory: directory.get_path(),
             manifest,
             executableIdentity,
+            localFileIdentity: localFileIdentities.sort().join('|'),
+            watchedFiles: Object.freeze([...new Set(watchedFiles)]),
         });
     }
 
@@ -206,12 +230,9 @@ export class PluginRegistry {
             const signalId = monitor.connect('changed', (_monitor, file, otherFile) => {
                 const names = [file?.get_basename(), otherFile?.get_basename()];
                 const plugin = this._known.get(id);
-                const executableName = plugin?.manifest.command[0].startsWith(
-                    `${plugin.directory}/`)
-                    ? GLib.path_get_basename(plugin.manifest.command[0])
-                    : null;
+                const watchedFiles = new Set(plugin?.watchedFiles ?? []);
                 if (names.includes('plugin.json') ||
-                    (executableName !== null && names.includes(executableName)))
+                    names.some(name => watchedFiles.has(name)))
                     this._scheduleReload(id);
             });
             this._monitors.set(id, monitor);
@@ -286,7 +307,8 @@ export class PluginRegistry {
         }
         if (previous !== null &&
             JSON.stringify(previous.manifest) === JSON.stringify(plugin.manifest) &&
-            previous.executableIdentity === plugin.executableIdentity) {
+            previous.executableIdentity === plugin.executableIdentity &&
+            previous.localFileIdentity === plugin.localFileIdentity) {
             return;
         }
 
@@ -427,4 +449,13 @@ function validateOwnedFile(info, userId, directory, context) {
     const mode = info.get_attribute_uint32(Gio.FILE_ATTRIBUTE_UNIX_MODE);
     if ((mode & 0o022) !== 0)
         throw new Error(`${context} is group or world writable`);
+}
+
+function fileIdentity(info) {
+    return [
+        info.get_attribute_uint64(Gio.FILE_ATTRIBUTE_UNIX_INODE),
+        info.get_size(),
+        info.get_attribute_uint64(Gio.FILE_ATTRIBUTE_TIME_MODIFIED),
+        info.get_attribute_uint32(Gio.FILE_ATTRIBUTE_TIME_MODIFIED_USEC),
+    ].join(':');
 }

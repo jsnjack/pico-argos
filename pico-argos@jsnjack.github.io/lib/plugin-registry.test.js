@@ -51,13 +51,24 @@ function deletePlugin(directory) {
 
 const later = createPlugin('later', {order: 20});
 const earlier = createPlugin('earlier', {order: 10});
+const interpreted = createPlugin('interpreted', {
+    command: ['gjs', '-m', './run.js'],
+    order: 10,
+});
+const interpretedSource = interpreted.get_child('run.js');
+interpretedSource.replace_contents(
+    '#!/usr/bin/env -S gjs -m\n',
+    null,
+    false,
+    Gio.FileCreateFlags.PRIVATE,
+    null);
 const invalid = createPlugin('invalid', {timeoutMs: 5_000});
 const ignored = createPlugin('.editor-temporary', {id: '.editor-temporary'});
 
 const discoveryRegistry = new PluginRegistry(rootPath);
 const result = await discoveryRegistry.discover();
 if (JSON.stringify(result.plugins.map(plugin => plugin.id)) !==
-    JSON.stringify(['earlier', 'later']))
+    JSON.stringify(['earlier', 'interpreted', 'later']))
     throw new Error(`Unexpected discovered plugins: ${JSON.stringify(result.plugins)}`);
 if (result.errors.length !== 1 || result.errors[0].id !== 'invalid')
     throw new Error(`Unexpected registry errors: ${JSON.stringify(result.errors)}`);
@@ -96,14 +107,20 @@ if (replacement.plugin.manifest.order !== 5)
     throw new Error('Registry did not validate the replacement manifest');
 
 let resolveExecutableReplacement;
+let resolveSourceReplacement;
 const executableReplacementPromise = new Promise(resolve => {
     resolveExecutableReplacement = resolve;
+});
+const sourceReplacementPromise = new Promise(resolve => {
+    resolveSourceReplacement = resolve;
 });
 monitoringRegistry.cancel();
 const executableRegistry = new PluginRegistry(rootPath);
 await executableRegistry.start(event => {
     if (event.kind === 'replaced' && event.plugin.id === 'earlier')
         resolveExecutableReplacement(event);
+    if (event.kind === 'replaced' && event.plugin.id === 'interpreted')
+        resolveSourceReplacement(event);
 });
 const earlierExecutable = earlier.get_child('run');
 earlierExecutable.replace_contents(
@@ -129,10 +146,35 @@ if (executableReplacement.previous.executableIdentity ===
     executableReplacement.plugin.executableIdentity) {
     throw new Error('Registry did not distinguish executable replacement');
 }
+
+interpretedSource.replace_contents(
+    '#!/usr/bin/env -S gjs -m\nprint("changed");\n',
+    null,
+    false,
+    Gio.FileCreateFlags.REPLACE_DESTINATION,
+    null);
+let sourceTimeoutId = 0;
+const sourceTimeoutPromise = new Promise((_, reject) => {
+    sourceTimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
+        reject(new Error('Registry local command replacement monitor timed out'));
+        return GLib.SOURCE_REMOVE;
+    });
+});
+const sourceReplacement = await Promise.race([
+    sourceReplacementPromise,
+    sourceTimeoutPromise,
+]);
+GLib.source_remove(sourceTimeoutId);
+if (sourceReplacement.previous.localFileIdentity ===
+    sourceReplacement.plugin.localFileIdentity) {
+    throw new Error('Registry did not distinguish interpreted source replacement');
+}
 executableRegistry.cancel();
 
 deletePlugin(later);
 deletePlugin(earlier);
+interpretedSource.delete(null);
+deletePlugin(interpreted);
 deletePlugin(invalid);
 deletePlugin(ignored);
 root.delete(null);

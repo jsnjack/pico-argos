@@ -10,5 +10,8 @@ for (const id of ['system-monitor', 'dependabot', 'pull-reviews', 'vpn', 'weathe
     const manifest = parseManifest(new TextDecoder().decode(bytes), directory, id);
     if (manifest.id !== id)
         throw new Error(`Reference manifest did not normalize: ${id}`);
+    const source = GLib.build_filenamev([directory, 'run.js']);
+    if (!GLib.file_test(source, GLib.FileTest.IS_EXECUTABLE))
+        throw new Error(`Reference plugin executable is not executable: ${id}`);
 }
 print('ok - every reference plugin manifest satisfies the public contract');
