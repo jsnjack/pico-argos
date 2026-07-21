@@ -24,6 +24,10 @@ if [[ ! -s "$package" ]]; then
     exit 1
 fi
 
+# mutter-devkit needs the host PipeWire socket after the nested session
+# replaces XDG_RUNTIME_DIR to isolate its Wayland display.
+export PIPEWIRE_RUNTIME_DIR=${PIPEWIRE_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/run/user/$UID}}
+
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/pico-argos-integration.XXXXXX")
 cleanup() {
     if [[ $test_root == "${TMPDIR:-/tmp}"/pico-argos-integration.* ]]; then
