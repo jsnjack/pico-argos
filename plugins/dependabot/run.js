@@ -31,12 +31,42 @@ function requestJson(uri, token) {
     message.request_headers.append('Authorization', `Bearer ${token}`);
     message.request_headers.append('X-GitHub-Api-Version', '2022-11-28');
     message.request_headers.append('User-Agent', 'pico-argos-dependabot');
-    const bytes = session.send_and_read(message, null);
+    const bytes = readBoundedResponse(session, message, 1_048_576);
     if (message.status_code < 200 || message.status_code >= 300)
         throw new Error(`GitHub returned HTTP ${message.status_code}`);
-    if (bytes.get_size() > 1_048_576)
-        throw new Error('GitHub response exceeds 1 MiB');
-    return JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(bytes.get_data()));
+    return JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(bytes));
+}
+
+function readBoundedResponse(session, message, maximumBytes) {
+    const stream = session.send(message, null);
+    const chunks = [];
+    let length = 0;
+    try {
+        for (;;) {
+            const requestBytes = Math.min(64 * 1_024, maximumBytes + 1 - length);
+            const block = stream.read_bytes(requestBytes, null);
+            const chunk = new Uint8Array(block.get_data());
+            if (chunk.length === 0)
+                break;
+            length += chunk.length;
+            if (length > maximumBytes)
+                throw new Error('GitHub response exceeds 1 MiB');
+            chunks.push(chunk);
+        }
+    } finally {
+        stream.close(null);
+    }
+    return joinChunks(chunks, length);
+}
+
+function joinChunks(chunks, length) {
+    const output = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) {
+        output.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return output;
 }
 
 function requiredEnvironment(name) {

@@ -33,16 +33,7 @@ class StableReader {
         try {
             this._stream ??= Gio.File.new_for_path(this.path).read(null);
             this._stream.seek(0, GLib.SeekType.SET, null);
-            const maximumBytes = Math.min(MAX_FILE_BYTES, budget.remaining);
-            if (maximumBytes === 0)
-                throw new Error('Sampling cycle exceeds 64 KiB');
-            const block = this._stream.read_bytes(maximumBytes, null);
-            const bytes = new Uint8Array(block.get_data());
-            if (bytes.length === maximumBytes &&
-                this._stream.read_bytes(1, null).get_size() !== 0)
-                throw new Error(`Sampling ${this.path} exceeds the 64-KiB cycle budget`);
-            budget.consume(bytes.length);
-            return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
+            return readBoundedStream(this._stream, budget, `Sampling ${this.path}`);
         } catch (error) {
             this.close();
             throw error;
@@ -414,14 +405,35 @@ function requireRange(value, minimum, maximum, name) {
 function readBoundedFile(path) {
     const stream = Gio.File.new_for_path(path).read(null);
     try {
-        const block = stream.read_bytes(MAX_FILE_BYTES + 1, null);
-        const bytes = new Uint8Array(block.get_data());
-        if (bytes.length > MAX_FILE_BYTES)
-            throw new Error(`${path} exceeds ${MAX_FILE_BYTES} bytes`);
-        return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
+        return readBoundedStream(stream, new SampleBudget(), path);
     } finally {
         stream.close(null);
     }
+}
+
+function readBoundedStream(stream, budget, context) {
+    if (budget.remaining === 0)
+        throw new Error(`${context} exceeds the 64-KiB cycle budget`);
+    const chunks = [];
+    let length = 0;
+    while (budget.remaining > 0) {
+        const block = stream.read_bytes(Math.min(8 * 1_024, budget.remaining), null);
+        const chunk = new Uint8Array(block.get_data());
+        if (chunk.length === 0)
+            break;
+        budget.consume(chunk.length);
+        length += chunk.length;
+        chunks.push(chunk);
+    }
+    if (budget.remaining === 0 && stream.read_bytes(1, null).get_size() !== 0)
+        throw new Error(`${context} exceeds the 64-KiB cycle budget`);
+    const bytes = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
 }
 
 function writeLine(value) {

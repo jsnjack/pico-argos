@@ -144,9 +144,10 @@ function formatPercent(value) {
 function formatRate(value) {
     if (value === null || !Number.isFinite(value) || value < 0)
         return '    -- KBs';
-    const megabytes = value >= 1_000_000;
-    const scaled = Math.min(value / (megabytes ? 1_000_000 : 1_000), 999.99);
-    return `${scaled.toFixed(2).padStart(6)} ${megabytes ? 'MBs' : 'KBs'}`;
+    const unit = value >= 1_000_000_000 ? 'GBs' : value >= 1_000_000 ? 'MBs' : 'KBs';
+    const divisor = unit === 'GBs' ? 1_000_000_000 : unit === 'MBs' ? 1_000_000 : 1_000;
+    const scaled = Math.min(value / divisor, 999.99);
+    return `${scaled.toFixed(2).padStart(6)} ${unit}`;
 }
 
 function formatDetail(value) {

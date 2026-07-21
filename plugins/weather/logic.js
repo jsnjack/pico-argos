@@ -120,6 +120,6 @@ function requireNumber(value, context) {
 
 function requireText(value, context) {
     if (typeof value !== 'string' || value.length === 0 || [...value].length > 512 ||
-        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value))
+        /[\u0000-\u001f\u007f-\u009f]/.test(value))
         throw new Error(`Weather ${context} is invalid`);
 }

@@ -57,4 +57,6 @@ const selected = systemSnapshot(metrics, ['cpu', 'network']);
 if (selected.panel.text !== 'cpu  12% ⏷ 123.40 KBs ⏶   2.10 MBs' ||
     JSON.stringify(selected.menu.map(item => item.id)) !== '["cpu","network"]')
     throw new Error('System field selection changed ordering or retained omitted metrics');
+if (!formatSystemLabel({...metrics, receive: 1_500_000_000}).includes('  1.50 GBs'))
+    throw new Error('System network formatter omitted the bounded SI gigabyte unit');
 print('ok - system monitor parses counters and formats fixed-width state');
