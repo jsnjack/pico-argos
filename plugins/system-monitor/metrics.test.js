@@ -51,12 +51,34 @@ for (const values of [
         throw new Error(`System label width changed: ${formatted.length} ${JSON.stringify(formatted)}`);
 }
 const snapshot = systemSnapshot(metrics);
-if ([...snapshot.panel.text].length !== 51 || snapshot.menu.length !== 4)
+if ([...snapshot.panel.text].length !== 51 || snapshot.menu.length !== 5)
     throw new Error('System protocol snapshot is not fixed-width and complete');
 const selected = systemSnapshot(metrics, ['cpu', 'network']);
 if (selected.panel.text !== 'cpu  12% ⏷ 123.40 KBs ⏶   2.10 MBs' ||
-    JSON.stringify(selected.menu.map(item => item.id)) !== '["cpu","network"]')
+    JSON.stringify(selected.menu.map(item => item.id)) !==
+        '["cpu","network-receive","network-transmit"]')
     throw new Error('System field selection changed ordering or retained omitted metrics');
 if (!formatSystemLabel({...metrics, receive: 1_500_000_000}).includes('  1.50 GBs'))
     throw new Error('System network formatter omitted the bounded SI gigabyte unit');
-print('ok - system monitor parses counters and formats fixed-width state');
+const compact = systemSnapshot(metrics, undefined, {
+    presentation: 'compact',
+    thresholds: {memory: {warning: 40, critical: 90}},
+    diskDevice: 'nvme0n1',
+    networkInterface: 'wlp1s0',
+});
+if (compact.panel.text !==
+        'CPU  12%  MEM  47%  IO   0%  ↓123.4K  ↑  2.1M' ||
+    [...compact.panel.text].length !== 45 ||
+    compact.panel.severity !== 'warning' ||
+    compact.menu.find(item => item.id === 'source-0')?.text !==
+        'Block device: nvme0n1' ||
+    compact.menu.find(item => item.id === 'source-1')?.text !==
+        'Network interface: wlp1s0') {
+    throw new Error(`Compact system presentation is invalid: ${JSON.stringify(compact)}`);
+}
+const critical = systemSnapshot(metrics, undefined, {
+    thresholds: {cpu: {warning: 5, critical: 10}},
+});
+if (critical.panel.severity !== 'critical')
+    throw new Error('System thresholds did not select critical severity');
+print('ok - system monitor parses counters and formats both fixed-width presentations');

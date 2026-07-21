@@ -14,3 +14,9 @@ The combined label keeps the legacy `cpu`, `mem`, and `io` tokens plus the
 down/up arrows, two-decimal `KBs`/`MBs` rates, and 9-pixel monospace styling.
 Putting the four readings in one persistent indicator removes recurring child
 processes without making the panel presentation unfamiliar.
+
+`presentation` defaults to `legacy`. Set it to `compact` for the cleaner
+uppercase, abbreviated-rate layout; both layouts remain fixed-width. Optional
+per-metric warning and critical thresholds change only the extension-owned
+severity style. The menu aligns detailed values and identifies the resolved
+block device and network interface without adding recurring work.

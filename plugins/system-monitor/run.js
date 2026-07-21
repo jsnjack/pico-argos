@@ -153,7 +153,12 @@ function sample() {
     }
 
     if (sampled && nowUs - lastEmissionUs >= 1_000_000 / MAX_EMITS_PER_SECOND) {
-        const snapshot = JSON.stringify(systemSnapshot(metrics, config.fields));
+        const snapshot = JSON.stringify(systemSnapshot(metrics, config.fields, {
+            presentation: config.presentation,
+            thresholds: config.thresholds,
+            diskDevice,
+            networkInterface,
+        }));
         if (snapshot !== lastSnapshot) {
             writeLine(snapshot);
             lastSnapshot = snapshot;
@@ -270,6 +275,8 @@ function loadConfig() {
         fields: ['cpu', 'memory', 'disk', 'network'],
         diskDevice: 'auto',
         networkInterface: 'auto',
+        presentation: 'legacy',
+        thresholds: {},
     };
     let value = {};
     try {
@@ -287,6 +294,8 @@ function loadConfig() {
         'fields',
         'diskDevice',
         'networkInterface',
+        'presentation',
+        'thresholds',
     ]);
     const unknown = Object.keys(value).find(key => !allowed.has(key));
     if (unknown !== undefined)
@@ -303,6 +312,35 @@ function loadConfig() {
     for (const field of ['diskDevice', 'networkInterface']) {
         if (typeof result[field] !== 'string' || !/^(auto|[A-Za-z0-9_.:-]+)$/.test(result[field]))
             throw new Error(`Invalid ${field}`);
+    }
+    if (!['legacy', 'compact'].includes(result.presentation))
+        throw new Error('presentation must be legacy or compact');
+    result.thresholds = validateThresholds(result.thresholds);
+    return result;
+}
+
+function validateThresholds(value) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value))
+        throw new Error('thresholds must be an object');
+    const result = {};
+    for (const [field, threshold] of Object.entries(value)) {
+        if (!['cpu', 'memory', 'disk'].includes(field) || threshold === null ||
+            typeof threshold !== 'object' || Array.isArray(threshold) ||
+            Object.keys(threshold).some(key => !['warning', 'critical'].includes(key))) {
+            throw new Error(`Invalid threshold field: ${field}`);
+        }
+        const normalized = {};
+        for (const key of ['warning', 'critical']) {
+            if (threshold[key] === undefined)
+                continue;
+            requireRange(threshold[key], 1, 100, `${field}.${key}`);
+            normalized[key] = threshold[key];
+        }
+        if (normalized.warning !== undefined && normalized.critical !== undefined &&
+            normalized.warning >= normalized.critical) {
+            throw new Error(`${field}.warning must be below ${field}.critical`);
+        }
+        result[field] = normalized;
     }
     return result;
 }

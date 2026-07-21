@@ -83,8 +83,23 @@ const ALL_FIELDS = Object.freeze(['cpu', 'memory', 'disk', 'network']);
 
 /** Formats one constant-width combined system label for selected fields. */
 export function formatSystemLabel(
-    {cpu, memory, disk, receive, transmit}, fields = ALL_FIELDS) {
+    {cpu, memory, disk, receive, transmit}, fields = ALL_FIELDS,
+    presentation = 'legacy') {
     const selected = new Set(fields);
+    if (presentation === 'compact') {
+        const parts = [];
+        if (selected.has('cpu'))
+            parts.push(`CPU ${formatPercent(cpu)}%`);
+        if (selected.has('memory'))
+            parts.push(`MEM ${formatPercent(memory)}%`);
+        if (selected.has('disk'))
+            parts.push(`IO ${formatPercent(disk)}%`);
+        if (selected.has('network')) {
+            parts.push(`↓${formatCompactRate(receive)}`);
+            parts.push(`↑${formatCompactRate(transmit)}`);
+        }
+        return parts.join('  ');
+    }
     const parts = [];
     if (selected.has('cpu'))
         parts.push(`cpu ${formatPercent(cpu)}%`);
@@ -98,28 +113,33 @@ export function formatSystemLabel(
 }
 
 /** Creates the public protocol snapshot for the combined indicator. */
-export function systemSnapshot(metrics, fields = ALL_FIELDS) {
+export function systemSnapshot(metrics, fields = ALL_FIELDS, options = {}) {
     const selected = new Set(fields);
-    const text = formatSystemLabel(metrics, fields);
+    const presentation = options.presentation ?? 'legacy';
+    const text = formatSystemLabel(metrics, fields, presentation);
     const menu = [];
     if (selected.has('cpu'))
-        menu.push({id: 'cpu', kind: 'label', text: `CPU utilization ${formatDetail(metrics.cpu)}`});
-    if (selected.has('memory')) {
-        menu.push({
-            id: 'memory',
-            kind: 'label',
-            text: `Memory utilization ${formatDetail(metrics.memory)}`,
-        });
-    }
+        menu.push(detail('cpu', 'CPU utilization', formatDetail(metrics.cpu)));
+    if (selected.has('memory'))
+        menu.push(detail('memory', 'Memory utilization', formatDetail(metrics.memory)));
     if (selected.has('disk'))
-        menu.push({id: 'disk', kind: 'label', text: `Disk activity ${formatDetail(metrics.disk)}`});
+        menu.push(detail('disk', 'Disk activity', formatDetail(metrics.disk)));
     if (selected.has('network')) {
-        menu.push({
-            id: 'network',
+        menu.push(detail('network-receive', 'Network receive', formatDetailRate(metrics.receive)));
+        menu.push(detail('network-transmit', 'Network transmit', formatDetailRate(metrics.transmit)));
+    }
+    const sources = [];
+    if (selected.has('disk') && options.diskDevice)
+        sources.push(`Block device: ${options.diskDevice}`);
+    if (selected.has('network') && options.networkInterface)
+        sources.push(`Network interface: ${options.networkInterface}`);
+    if (sources.length !== 0) {
+        menu.push({id: 'sources-separator', kind: 'separator'});
+        sources.forEach((source, index) => menu.push({
+            id: `source-${index}`,
             kind: 'label',
-            text: `Network ⏷ ${formatRate(metrics.receive).trim()} ` +
-                `⏶ ${formatRate(metrics.transmit).trim()}`,
-        });
+            text: source,
+        }));
     }
     return {
         version: 1,
@@ -129,10 +149,18 @@ export function systemSnapshot(metrics, fields = ALL_FIELDS) {
             text,
             appearance: 'monospace',
             accessibleName: `System utilization: ${text}`,
-            severity: 'normal',
+            severity: metricSeverity(metrics, fields, options.thresholds ?? {}),
         },
         menu,
     };
+}
+
+function formatCompactRate(value) {
+    if (value === null || !Number.isFinite(value) || value < 0)
+        return '   --K';
+    const unit = value >= 1_000_000_000 ? 'G' : value >= 1_000_000 ? 'M' : 'K';
+    const divisor = unit === 'G' ? 1_000_000_000 : unit === 'M' ? 1_000_000 : 1_000;
+    return `${Math.min(value / divisor, 999.9).toFixed(1).padStart(5)}${unit}`;
 }
 
 function formatPercent(value) {
@@ -152,6 +180,36 @@ function formatRate(value) {
 
 function formatDetail(value) {
     return value === null || !Number.isFinite(value) ? 'unavailable' : `${Math.round(value)}%`;
+}
+
+function formatDetailRate(value) {
+    return formatRate(value).trim()
+        .replace('KBs', 'kB/s')
+        .replace('MBs', 'MB/s')
+        .replace('GBs', 'GB/s');
+}
+
+function detail(id, name, value) {
+    return {
+        id,
+        kind: 'label',
+        text: `${name.padEnd(20)}${value.padStart(12)}`,
+    };
+}
+
+function metricSeverity(metrics, fields, thresholds) {
+    let warning = false;
+    for (const field of fields) {
+        const threshold = thresholds[field];
+        const value = field === 'memory' ? metrics.memory : metrics[field];
+        if (threshold === undefined || !Number.isFinite(value))
+            continue;
+        if (threshold.critical !== undefined && value >= threshold.critical)
+            return 'critical';
+        if (threshold.warning !== undefined && value >= threshold.warning)
+            warning = true;
+    }
+    return warning ? 'warning' : 'normal';
 }
 
 function clamp(value, minimum, maximum) {
