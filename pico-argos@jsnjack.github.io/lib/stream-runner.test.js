@@ -77,6 +77,26 @@ await expectFailure('split-utf8', 'stdout-eof', {}, {
 if (splitText !== '€')
     throw new Error('Runner did not preserve UTF-8 split across pipe reads');
 
+let finalBurstCount = 0;
+await expectFailure('final-burst', 'unexpected-exit', {
+    maxMessagesPerSecond: 20,
+}, {
+    onMessage: raw => {
+        finalBurstCount++;
+        return parseProtocolMessage(raw, {allowHeartbeat: true});
+    },
+});
+if (finalBurstCount !== 8)
+    throw new Error(`Runner dropped final buffered messages: ${finalBurstCount}`);
+const finalBurstEvents = events.filter(event =>
+    event.pluginId === 'fixture-final-burst');
+const processExitIndex = finalBurstEvents.findIndex(event =>
+    event.kind === 'process-exit');
+const lastMessageIndex = finalBurstEvents.findLastIndex(event =>
+    event.kind === 'stream-line-complete');
+if (processExitIndex < 0 || processExitIndex >= lastMessageIndex)
+    throw new Error('Final burst did not exercise post-exit pipe draining');
+
 await expectFailure('partial', 'partial-line');
 await expectFailure('message-flood', 'message-rate');
 await expectFailure('byte-flood', 'byte-rate');

@@ -9,6 +9,7 @@ import {StreamFramer, StreamStderr} from './stream-framing.js';
 
 const READ_BYTES = 8 * 1_024;
 const TERMINATE_GRACE_MS = 250;
+const PIPE_DRAIN_MS = 250;
 
 /** Describes one supervised stream child failure. */
 export class StreamRunError extends Error {
@@ -86,7 +87,9 @@ export class StreamRunner {
             failure: null,
             cancelled: false,
             exited: false,
+            exitFailure: null,
             started: false,
+            drainSourceId: 0,
             forceSourceId: 0,
             startupSourceId: 0,
             heartbeatSourceId: 0,
@@ -187,7 +190,7 @@ export class StreamRunner {
             () => {
                 framer.finish();
                 this._emit('stdout-eof', manifest.id, runId, this._clock.nowUs());
-                if (!context.cancelled)
+                if (!context.cancelled && !context.exited)
                     this._terminate(context, 'stdout-eof', `Stream ${manifest.id} closed stdout`);
             }).catch(error => {
             this._terminate(
@@ -230,18 +233,26 @@ export class StreamRunner {
             if (!context.cancelled && context.failure === null) {
                 if (process.get_if_exited()) {
                     const status = process.get_exit_status();
-                    this._fail(
-                        context,
-                        status === 0 ? 'unexpected-exit' : 'nonzero-exit',
-                        `Stream ${manifest.id} exited with status ${status}`);
+                    context.exitFailure = {
+                        kind: status === 0 ? 'unexpected-exit' : 'nonzero-exit',
+                        message: `Stream ${manifest.id} exited with status ${status}`,
+                    };
                 } else {
-                    this._fail(
-                        context,
-                        'signal',
-                        `Stream ${manifest.id} exited after signal ${process.get_term_sig()}`);
+                    context.exitFailure = {
+                        kind: 'signal',
+                        message: `Stream ${manifest.id} exited after signal ` +
+                            `${process.get_term_sig()}`,
+                    };
                 }
             }
-            cancellable.cancel();
+            context.drainSourceId = GLib.timeout_add(
+                GLib.PRIORITY_DEFAULT,
+                PIPE_DRAIN_MS,
+                () => {
+                    context.drainSourceId = 0;
+                    cancellable.cancel();
+                    return GLib.SOURCE_REMOVE;
+                });
         });
 
         try {
@@ -250,11 +261,12 @@ export class StreamRunner {
             removeSource(context, 'startupSourceId');
             removeSource(context, 'heartbeatSourceId');
             removeSource(context, 'forceSourceId');
+            removeSource(context, 'drainSourceId');
             if (this._active.get(manifest.id) === context)
                 this._active.delete(manifest.id);
         }
 
-        const failure = context.failure ?? {
+        const failure = context.failure ?? context.exitFailure ?? {
             kind: 'cancelled',
             message: `Stream ${manifest.id} was cancelled`,
         };
@@ -321,7 +333,16 @@ export class StreamRunner {
     _terminate(context, kind, message) {
         this._fail(context, kind, message);
         if (context.exited) {
-            context.cancellable.cancel();
+            if (context.drainSourceId === 0) {
+                context.drainSourceId = GLib.timeout_add(
+                    GLib.PRIORITY_DEFAULT,
+                    PIPE_DRAIN_MS,
+                    () => {
+                        context.drainSourceId = 0;
+                        context.cancellable.cancel();
+                        return GLib.SOURCE_REMOVE;
+                    });
+            }
             return;
         }
         if (context.forceSourceId !== 0)

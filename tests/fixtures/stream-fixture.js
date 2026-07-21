@@ -1,6 +1,7 @@
 #!/usr/bin/env -S gjs -m
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import Gio from 'gi://Gio';
 import GioUnix from 'gi://GioUnix';
 import GLib from 'gi://GLib';
 
@@ -27,6 +28,22 @@ switch (ARGV[0]) {
         GLib.usleep(20_000);
         write(stdout, new Uint8Array([0x82, 0xac]));
         write(stdout, encoder.encode('"},"menu":[]}\n'));
+        break;
+    }
+    case 'final-burst': {
+        const burst = Array.from({length: 8}, (_value, index) => `${JSON.stringify({
+            version: 1,
+            type: 'snapshot',
+            panel: {text: String(index)},
+            menu: Array.from({length: 8}, (_item, itemIndex) => ({
+                id: `item-${itemIndex}`,
+                kind: 'label',
+                text: 'x'.repeat(512),
+            })),
+        })}\n`).join('');
+        Gio.Subprocess.new(
+            ['/bin/sh', '-c', 'sleep 0.03; printf %s "$1"', 'pico-argos-burst', burst],
+            Gio.SubprocessFlags.NONE);
         break;
     }
     case 'partial':
