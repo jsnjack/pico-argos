@@ -190,6 +190,7 @@ export class PluginRegistry {
     _scheduleFromRoot(file) {
         const id = file.get_basename();
         if (PLUGIN_ID_PATTERN.test(id)) {
+            this._unmonitorPlugin(id);
             this._monitorPlugin(id);
             this._scheduleReload(id);
         }

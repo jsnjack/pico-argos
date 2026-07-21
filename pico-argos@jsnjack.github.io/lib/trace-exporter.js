@@ -24,6 +24,7 @@ export class TraceExporter {
         this._stream = null;
         this._file = null;
         this._pendingBytes = null;
+        this._pendingOffset = 0;
         this.active = false;
     }
 
@@ -123,19 +124,39 @@ export class TraceExporter {
     }
 
     _writeChunk(chunk) {
-        this._pendingBytes = new GLib.Bytes(new TextEncoder().encode(chunk));
+        this._pendingBytes = new TextEncoder().encode(chunk);
+        this._pendingOffset = 0;
+        this._writePendingBytes();
+    }
+
+    _writePendingBytes() {
+        const remaining = new GLib.Bytes(
+            this._pendingBytes.subarray(this._pendingOffset));
         this._stream.write_bytes_async(
-            this._pendingBytes,
+            remaining,
             EXPORT_PRIORITY,
             this._cancellable,
             (source, result) => {
+                let written;
                 try {
-                    source.write_bytes_finish(result);
+                    written = source.write_bytes_finish(result);
                 } catch (error) {
                     this._fail('Writing trace export', error);
                     return;
                 }
+                if (!Number.isInteger(written) || written <= 0) {
+                    this._fail(
+                        'Writing trace export',
+                        new Error('Output stream made no progress'));
+                    return;
+                }
+                this._pendingOffset += written;
+                if (this._pendingOffset < this._pendingBytes.length) {
+                    this._writePendingBytes();
+                    return;
+                }
                 this._pendingBytes = null;
+                this._pendingOffset = 0;
                 this._scheduleChunk();
             });
     }
@@ -168,6 +189,7 @@ export class TraceExporter {
         }
         this._cancellable.cancel();
         this._pendingBytes = null;
+        this._pendingOffset = 0;
         this._stream?.close_async(EXPORT_PRIORITY, null, null);
         this._callbacks.onError(new Error(`${context}: ${error.message}`));
     }

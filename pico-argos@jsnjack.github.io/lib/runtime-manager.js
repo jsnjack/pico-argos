@@ -162,6 +162,8 @@ export class RuntimeManager {
         this._onPluginChanged = null;
         this._onPluginRemoved = null;
         this._onHealth = null;
+        this._onEvent = null;
+        this._onPhase = null;
     }
 
     /** Requests the manifest-gated one-shot menu-open refresh. */
@@ -313,6 +315,7 @@ export class RuntimeManager {
         health.lastFailure = {
             kind,
             message: error.message ?? String(error),
+            stderr: typeof error.stderr === 'string' ? error.stderr : '',
         };
         if (kind.includes('timeout'))
             health.timeouts++;
@@ -507,6 +510,9 @@ function snapshotHealth(health, nowUs) {
     const noOps = health.rawNoOps + health.semanticNoOps;
     return {
         ...health,
+        lastFailure: health.lastFailure === null
+            ? null
+            : {kind: health.lastFailure.kind},
         streamUptimeUs: health.mode === 'stream' &&
             ['starting', 'running'].includes(health.processState) &&
             health.runStartedUs !== null
@@ -540,13 +546,14 @@ function isOutputRejection(kind) {
         'utf8',
         'partial-line',
         'stdout-read',
+        'stderr-read',
         'protocol',
     ].includes(kind);
 }
 
 function validateReservedText(plugin, snapshot) {
     const reserve = plugin.manifest.reserveTextChars;
-    if (reserve === 0 || snapshot.panel?.text === null)
+    if (reserve === 0 || snapshot.panel === null || snapshot.panel.text === null)
         return;
     if ([...snapshot.panel.text].length > reserve) {
         const error = new Error(

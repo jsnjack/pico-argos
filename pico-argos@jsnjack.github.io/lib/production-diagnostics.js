@@ -7,7 +7,7 @@ import * as Config from 'resource:///org/gnome/shell/misc/config.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {DiagnosticService} from './diagnostic-service.js';
-import {TRACE_EVENTS} from './trace.js';
+import {TRACE_EVENTS, tracePluginId} from './trace.js';
 import {TraceExporter} from './trace-exporter.js';
 
 const MAX_SUMMARY_BYTES = 64 * 1_024;
@@ -204,6 +204,8 @@ export class ProductionDiagnostics {
                 timing: traceData.timing,
                 ...traceData.ring.summary(),
                 eventSchema: ['eventId', 'timestampUs', 'correlationId', 'detailId'],
+                eventTypes: Object.fromEntries(Object.entries(TRACE_EVENTS)
+                    .map(([name, id]) => [id, name])),
             },
             summary: this._diagnostics.snapshot(),
         };
@@ -221,6 +223,7 @@ function sanitizePlugin(plugin) {
     const manifest = plugin.manifest;
     return {
         id: manifest.id,
+        tracePluginId: tracePluginId(manifest.id),
         mode: manifest.mode,
         position: manifest.position,
         order: manifest.order,

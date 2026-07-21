@@ -43,6 +43,7 @@ export class PluginIndicator {
         this._panel = null;
         this._stale = false;
         this._styleClass = '';
+        this._reservedWidthKey = null;
         this._attached = false;
 
         this.actor = new PanelMenu.Button(0.5, plugin.id);
@@ -83,8 +84,8 @@ export class PluginIndicator {
     /** Updates setup-only manifest presentation without replacing actors. */
     reconfigure(plugin) {
         this.plugin = plugin;
-        if (this._attached)
-            this._applyReservedWidth();
+        if (this._attached && this._panel !== null)
+            this._applyReservedWidth(this._panel.appearance);
         if (this._menuBuilt) {
             const isStream = plugin.manifest.mode === 'stream';
             this._write(
@@ -110,7 +111,8 @@ export class PluginIndicator {
     /** Applies theme-dependent setup only after the actor enters the stage. */
     attach() {
         this._attached = true;
-        this._applyReservedWidth();
+        if (this._panel !== null)
+            this._applyReservedWidth(this._panel.appearance);
     }
 
     /** Applies only values that differ from the persistent actor model. */
@@ -149,6 +151,7 @@ export class PluginIndicator {
         this._label = null;
         this._footerItem = null;
         this._restartItem = null;
+        this._reservedWidthKey = null;
         this._actions = null;
     }
 
@@ -194,8 +197,10 @@ export class PluginIndicator {
 
         const appearance = panel?.appearance ?? 'normal';
         const severity = panel?.severity ?? 'normal';
-        if (panelVisible)
+        if (panelVisible) {
             writes += this._applyStyle(appearance, severity, stale);
+            this._applyReservedWidth(appearance);
+        }
         this._panel = panel;
         this._stale = stale;
         return writes;
@@ -331,11 +336,22 @@ export class PluginIndicator {
         }
     }
 
-    _applyReservedWidth() {
+    _applyReservedWidth(appearance) {
         const reserve = this.plugin.manifest.reserveTextChars;
-        const width = reserve === 0 ? -1 : reserve * 8;
+        const key = `${appearance}:${reserve}`;
+        if (key === this._reservedWidthKey)
+            return;
+        let width = -1;
+        if (reserve !== 0 && appearance === 'monospace') {
+            const original = this._label.text;
+            this._label.text = '0'.repeat(reserve);
+            const [, naturalWidth] = this._label.get_preferred_width(-1);
+            this._label.text = original;
+            width = Math.ceil(naturalWidth);
+        }
         if (this._label.width !== width)
             this._label.width = width;
+        this._reservedWidthKey = key;
     }
 
     _write(target, property, value, mutation) {

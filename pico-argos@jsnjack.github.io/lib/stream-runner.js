@@ -216,7 +216,13 @@ export class StreamRunner {
                 error.kind ?? 'stderr-read',
                 `Reading stream ${manifest.id} stderr: ${error.message}`);
         });
-        const waitPromise = waitForProcess(process).then(() => {
+        const waitPromise = waitForProcess(process).catch(error => {
+            this._terminate(
+                context,
+                'wait',
+                `Waiting for stream ${manifest.id}: ${error.message}`);
+            return waitForProcess(process);
+        }).then(() => {
             context.exited = true;
             context.processExitUs = this._clock.nowUs();
             this._emit('process-exit', manifest.id, runId, context.processExitUs);

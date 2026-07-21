@@ -32,7 +32,18 @@ export const TRACE_EVENTS = Object.freeze({
     UI_QUEUED: 25,
     UI_APPLY_BEGIN: 26,
     SNAPSHOT_ACCEPTED: 27,
+    SNAPSHOT_SEQUENCE: 28,
 });
+
+/** Returns a stable numeric plugin identifier suitable for fixed trace slots. */
+export function tracePluginId(pluginId) {
+    let hash = 2_166_136_261;
+    for (let index = 0; index < pluginId.length; index++) {
+        hash ^= pluginId.charCodeAt(index);
+        hash = Math.imul(hash, 16_777_619) >>> 0;
+    }
+    return hash;
+}
 
 /** Stores one trace session in fixed-capacity numeric arrays. */
 export class TraceRing {

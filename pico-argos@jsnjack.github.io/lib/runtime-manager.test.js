@@ -126,11 +126,16 @@ for (const name of ['raw-compare', 'parse', 'validate', 'semantic-diff']) {
 
 const invalid = new Error('fixture failed');
 invalid.kind = 'fixture';
+invalid.stderr = 'private child output';
 oneShotRunner.outputs.push(invalid);
 runtime.refreshOnOpen('fixture');
 await settle();
 if (changes.at(-1)[2] !== 'failure-changed')
     throw new Error('Runtime did not apply the manifest failure policy');
+const sanitizedFailure = runtime.snapshot().plugins[0].lastFailure;
+if (JSON.stringify(sanitizedFailure) !== '{"kind":"fixture"}' ||
+    JSON.stringify(runtime.snapshot()).includes('private child output'))
+    throw new Error('Runtime diagnostics exposed retained child failure output');
 
 clock.valueUs = 11_000_000;
 runtime.tickStaleness();
@@ -143,6 +148,18 @@ runtime.refreshOnOpen('fixture');
 await settle();
 if (runtime.snapshot().plugins[0].lastFailure === null)
     throw new Error('Manifest replacement did not revalidate reserved text');
+
+runtime.setPlugin(plugin({reserveTextChars: 1}));
+oneShotRunner.outputs.push(JSON.stringify({
+    version: 1,
+    type: 'snapshot',
+    panel: null,
+    menu: [],
+}));
+runtime.refreshOnOpen('fixture');
+await settle();
+if (runtime.snapshot().plugins[0].lastFailure !== null)
+    throw new Error('A hidden panel incorrectly violated reserveTextChars');
 
 runtime.removePlugin('fixture');
 runtime.destroy();

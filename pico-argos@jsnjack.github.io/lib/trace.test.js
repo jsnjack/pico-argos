@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import {TraceRing, TRACE_EVENTS} from './trace.js';
+import {TraceRing, TRACE_EVENTS, tracePluginId} from './trace.js';
 
 function assertEqual(actual, expected, message) {
     if (JSON.stringify(actual) !== JSON.stringify(expected))
@@ -8,6 +8,11 @@ function assertEqual(actual, expected, message) {
 }
 
 const cases = [
+    ['plugin trace identifiers are stable and distinct', () => {
+        assertEqual(tracePluginId('alpha'), tracePluginId('alpha'), 'stable plugin ID');
+        if (tracePluginId('alpha') === tracePluginId('beta'))
+            throw new Error('Fixture plugin trace IDs collided');
+    }],
     ['trace slots retain numeric correlation fields', () => {
         const trace = new TraceRing(2);
 

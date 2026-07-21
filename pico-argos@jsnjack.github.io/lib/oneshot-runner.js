@@ -119,6 +119,10 @@ export class OneShotRunner {
                 },
                 onEof: () => this._emit(
                     'stdout-eof', manifest.id, runId, this._clock.nowUs()),
+                onReadError: error => this._terminate(
+                    context,
+                    'stdout-read',
+                    `Reading plugin ${manifest.id} stdout: ${error.message}`),
             });
         const stderrPromise = drainBounded(
             process.get_stderr_pipe(),
@@ -131,8 +135,18 @@ export class OneShotRunner {
             {
                 onEof: () => this._emit(
                     'stderr-eof', manifest.id, runId, this._clock.nowUs()),
+                onReadError: error => this._terminate(
+                    context,
+                    'stderr-read',
+                    `Reading plugin ${manifest.id} stderr: ${error.message}`),
             });
-        const waitPromise = waitForProcess(process).finally(() => {
+        const waitPromise = waitForProcess(process).catch(error => {
+            this._terminate(
+                context,
+                'wait',
+                `Waiting for plugin ${manifest.id}: ${error.message}`);
+            return waitForProcess(process);
+        }).then(() => {
             context.exited = true;
             context.processExitUs = this._clock.nowUs();
             this._emit('process-exit', manifest.id, runId, context.processExitUs);
@@ -275,7 +289,7 @@ function drainBounded(
     maximumBytes,
     cancellable,
     onOverflow,
-    {onFirstByte = null, onEof = null} = {}) {
+    {onFirstByte = null, onEof = null, onReadError = null} = {}) {
     const chunks = [];
     let bytes = 0;
     return new Promise((resolve, reject) => {
@@ -296,7 +310,12 @@ function drainBounded(
                             resolve({chunks, bytes});
                             return;
                         }
-                        reject(error);
+                        try {
+                            onReadError?.(error);
+                            resolve({chunks, bytes});
+                        } catch (callbackError) {
+                            reject(callbackError);
+                        }
                         return;
                     }
                     if (chunk.length === 0) {

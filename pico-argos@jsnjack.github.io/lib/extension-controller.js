@@ -10,7 +10,7 @@ import {ProductionDiagnostics} from './production-diagnostics.js';
 import {RenderCoordinator} from './render-coordinator.js';
 import {RuntimeManager} from './runtime-manager.js';
 import {StageTrace} from './stage-trace.js';
-import {TRACE_EVENTS} from './trace.js';
+import {TRACE_EVENTS, tracePluginId} from './trace.js';
 
 const MAX_REGISTRY_ERRORS = 32;
 
@@ -162,19 +162,33 @@ export class ExtensionController {
             this._diagnostics.recordTraceEvent(
                 TRACE_EVENTS.SCHEDULED_DUE,
                 event.deadlineUs,
-                0);
+                0,
+                tracePluginId(event.pluginId));
             this._diagnostics.recordTraceEvent(
                 TRACE_EVENTS.SCHEDULER_CALLBACK_BEGIN,
                 this._clock.nowUs(),
-                0);
+                0,
+                tracePluginId(event.pluginId));
         }
         const traceEvent = RUNTIME_TRACE_EVENTS[event.kind];
         if (traceEvent !== undefined) {
+            const detailId = event.kind === 'launch-begin'
+                ? tracePluginId(event.pluginId)
+                : event.kind === 'snapshot-accepted'
+                    ? event.runId ?? 0
+                    : event.sequence ?? 0;
             this._diagnostics.recordTraceEvent(
                 traceEvent,
                 event.timestampUs ?? this._clock.nowUs(),
                 event.cycleId ?? event.runId ?? event.error?.details?.runId ?? 0,
-                event.sequence ?? 0);
+                detailId);
+            if (event.kind === 'snapshot-accepted' && (event.sequence ?? 0) !== 0) {
+                this._diagnostics.recordTraceEvent(
+                    TRACE_EVENTS.SNAPSHOT_SEQUENCE,
+                    event.timestampUs ?? this._clock.nowUs(),
+                    event.cycleId,
+                    event.sequence);
+            }
         }
         if (event.kind === 'spawn-return' && event.spawned === false)
             this._diagnostics.recordSpawnFailure();
@@ -182,7 +196,8 @@ export class ExtensionController {
             this._diagnostics.recordTraceEvent(
                 TRACE_EVENTS.STREAM_RESTART_SCHEDULED,
                 this._clock.nowUs(),
-                event.error?.details?.runId ?? 0);
+                event.error?.details?.runId ?? 0,
+                tracePluginId(event.pluginId));
         }
         if (event.kind === 'limit')
             this._recordRegistryError(event.pluginId, event.message);
