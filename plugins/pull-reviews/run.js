@@ -34,7 +34,9 @@ try {
 
 function requestGraphql(token, searchQuery) {
     const body = JSON.stringify({
-        query: 'query($query:String!){search(query:$query,type:ISSUE,first:1){issueCount}}',
+        query: 'query($query:String!){search(query:$query,type:ISSUE,first:5){' +
+            'issueCount nodes{... on PullRequest{number title url ' +
+            'repository{nameWithOwner}}}}}',
         variables: {query: searchQuery},
     });
     const message = Soup.Message.new('POST', 'https://api.github.com/graphql');
