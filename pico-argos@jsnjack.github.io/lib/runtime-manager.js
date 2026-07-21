@@ -56,6 +56,7 @@ export class RuntimeManager {
             clock,
             run: (manifest, request) => this._runOneShot(manifest, request),
             onEvent: event => this._handleOneShotEvent(event),
+            onPhase,
         });
         this._streamSupervisor = new StreamSupervisor({
             clock,
@@ -142,6 +143,27 @@ export class RuntimeManager {
         this._oneShotRunner.cancelAll();
     }
 
+    /** Stops owned work and clears every retained plugin and semantic model. */
+    destroy() {
+        this._started = false;
+        this._generation++;
+        if (this._staleSourceId !== 0) {
+            GLib.source_remove(this._staleSourceId);
+            this._staleSourceId = 0;
+        }
+        this._oneShotScheduler.destroy();
+        this._streamSupervisor.destroy();
+        this._oneShotRunner.cancelAll();
+        this._state.clear();
+        this._plugins.clear();
+        this._health.clear();
+        this._onChanges = null;
+        this._onPluginAdded = null;
+        this._onPluginChanged = null;
+        this._onPluginRemoved = null;
+        this._onHealth = null;
+    }
+
     /** Requests the manifest-gated one-shot menu-open refresh. */
     refreshOnOpen(pluginId) {
         return this._oneShotScheduler.requestRefresh(pluginId);
@@ -216,18 +238,12 @@ export class RuntimeManager {
         health.stdoutBytes += new TextEncoder().encode(raw).length + 1;
         const startedUs = this._clock.nowUs();
         let processed;
+        const observe = this._stateObserver(plugin, context, startedUs);
         try {
             processed = this._state.acceptProtocol(plugin.id, raw, {
                 allowHeartbeat: true,
                 validateSnapshot: snapshot => validateReservedText(plugin, snapshot),
-                observe: kind => this._onEvent?.({
-                    runtime: 'runner',
-                    kind,
-                    pluginId: plugin.id,
-                    runId: context.runId ?? 0,
-                    sequence: context.sequence ?? 0,
-                    timestampUs: this._clock.nowUs(),
-                }),
+                observe,
             });
         } finally {
             this._onPhase?.(
@@ -248,17 +264,12 @@ export class RuntimeManager {
     _acceptSnapshot(plugin, raw, runId) {
         const startedUs = this._clock.nowUs();
         let processed;
+        const context = {runId, sequence: 0};
+        const observe = this._stateObserver(plugin, context, startedUs);
         try {
             processed = this._state.acceptProtocol(plugin.id, raw, {
                 validateSnapshot: snapshot => validateReservedText(plugin, snapshot),
-                observe: kind => this._onEvent?.({
-                    runtime: 'runner',
-                    kind,
-                    pluginId: plugin.id,
-                    runId,
-                    sequence: 0,
-                    timestampUs: this._clock.nowUs(),
-                }),
+                observe,
             });
         } finally {
             this._onPhase?.(
@@ -266,7 +277,7 @@ export class RuntimeManager {
                 this._clock.nowUs() - startedUs,
                 plugin.id);
         }
-        this._acceptProcessed(plugin, processed.state, {runId, sequence: 0});
+        this._acceptProcessed(plugin, processed.state, context);
     }
 
     _acceptProcessed(plugin, result, context = {}) {
@@ -402,6 +413,36 @@ export class RuntimeManager {
             Number.isFinite(details.processExitUs)) {
             health.lastChildRuntimeUs = details.processExitUs - details.launchBeginUs;
         }
+    }
+
+    _stateObserver(plugin, context, startedUs) {
+        let parseBeginUs = null;
+        let parseEndUs = null;
+        let validateEndUs = null;
+        return kind => {
+            const nowUs = this._clock.nowUs();
+            if (kind === 'raw-compare-end') {
+                this._onPhase?.('raw-compare', nowUs - startedUs, plugin.id);
+            } else if (kind === 'parse-begin') {
+                parseBeginUs = nowUs;
+            } else if (kind === 'parse-end') {
+                parseEndUs = nowUs;
+                this._onPhase?.('parse', nowUs - parseBeginUs, plugin.id);
+            } else if (kind === 'validate-end') {
+                validateEndUs = nowUs;
+                this._onPhase?.('validate', nowUs - parseEndUs, plugin.id);
+            } else if (kind === 'semantic-diff-end') {
+                this._onPhase?.('semantic-diff', nowUs - validateEndUs, plugin.id);
+            }
+            this._onEvent?.({
+                runtime: 'runner',
+                kind,
+                pluginId: plugin.id,
+                runId: context.runId ?? 0,
+                sequence: context.sequence ?? 0,
+                timestampUs: nowUs,
+            });
+        };
     }
 
     _updateStaleTimer() {

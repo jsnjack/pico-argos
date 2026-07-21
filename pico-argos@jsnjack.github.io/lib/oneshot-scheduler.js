@@ -7,7 +7,7 @@ const PRIORITY_REFRESH = 1;
 
 /** Owns one deadline source and serializes all one-shot plugin runs. */
 export class OneShotScheduler {
-    constructor({clock, run, timer = null, onEvent = null}) {
+    constructor({clock, run, timer = null, onEvent = null, onPhase = null}) {
         if (typeof clock?.nowUs !== 'function')
             throw new TypeError('OneShotScheduler requires a monotonic clock');
         if (typeof run !== 'function')
@@ -16,6 +16,7 @@ export class OneShotScheduler {
         this._run = run;
         this._timer = timer ?? new GLibDeadlineTimer();
         this._onEvent = onEvent;
+        this._onPhase = onPhase;
         this._records = new Map();
         this._active = null;
         this._source = null;
@@ -68,6 +69,16 @@ export class OneShotScheduler {
             record.pending = null;
     }
 
+    /** Stops scheduling and releases all retained plugin records. */
+    destroy() {
+        this.stop();
+        this._active = null;
+        this._records.clear();
+        this._run = null;
+        this._onEvent = null;
+        this._onPhase = null;
+    }
+
     /** Coalesces one menu-open refresh ahead of periodic work. */
     requestRefresh(pluginId) {
         const record = this._records.get(pluginId);
@@ -105,11 +116,22 @@ export class OneShotScheduler {
     }
 
     _poll() {
+        const callbackBeginUs = this._clock.nowUs();
+        try {
+            this._pollAt(callbackBeginUs);
+        } finally {
+            this._onPhase?.(
+                'scheduler-callback',
+                this._clock.nowUs() - callbackBeginUs,
+                null);
+        }
+    }
+
+    _pollAt(nowUs) {
         if (this._source !== null) {
             this._timer.cancel(this._source);
             this._source = null;
         }
-        const nowUs = this._clock.nowUs();
         for (const record of this._records.values()) {
             if (record.nextDueUs > nowUs)
                 continue;

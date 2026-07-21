@@ -94,7 +94,42 @@ const replacement = await Promise.race([replacementPromise, timeoutPromise]);
 GLib.source_remove(timeoutId);
 if (replacement.plugin.manifest.order !== 5)
     throw new Error('Registry did not validate the replacement manifest');
+
+let resolveExecutableReplacement;
+const executableReplacementPromise = new Promise(resolve => {
+    resolveExecutableReplacement = resolve;
+});
 monitoringRegistry.cancel();
+const executableRegistry = new PluginRegistry(rootPath);
+await executableRegistry.start(event => {
+    if (event.kind === 'replaced' && event.plugin.id === 'earlier')
+        resolveExecutableReplacement(event);
+});
+const earlierExecutable = earlier.get_child('run');
+earlierExecutable.replace_contents(
+    '#!/bin/sh\nexit 1\n',
+    null,
+    false,
+    Gio.FileCreateFlags.REPLACE_DESTINATION,
+    null);
+GLib.chmod(earlierExecutable.get_path(), 0o700);
+let executableTimeoutId = 0;
+const executableTimeoutPromise = new Promise((_, reject) => {
+    executableTimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
+        reject(new Error('Registry executable replacement monitor timed out'));
+        return GLib.SOURCE_REMOVE;
+    });
+});
+const executableReplacement = await Promise.race([
+    executableReplacementPromise,
+    executableTimeoutPromise,
+]);
+GLib.source_remove(executableTimeoutId);
+if (executableReplacement.previous.executableIdentity ===
+    executableReplacement.plugin.executableIdentity) {
+    throw new Error('Registry did not distinguish executable replacement');
+}
+executableRegistry.cancel();
 
 deletePlugin(later);
 deletePlugin(earlier);

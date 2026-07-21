@@ -27,16 +27,21 @@ export const DURATION_BUCKETS_US = Object.freeze([
 export const HARNESS_PHASES = Object.freeze([
     'child-wall',
     'decode',
+    'first-byte',
     'get-summary',
     'menu-build',
+    'parse',
     'parse-validate-diff',
     'pipe-drain',
+    'raw-compare',
     'scheduler-callback',
     'scheduler-lateness',
+    'semantic-diff',
     'spawn-call',
     'trace-serialize',
     'ui-apply',
     'ui-queue-wait',
+    'validate',
 ]);
 
 /** Mutation names recorded by the performance harness. */
@@ -82,11 +87,13 @@ export class DurationHistogram {
         this.maximumUs = this.maximumUs === null
             ? durationUs
             : Math.max(this.maximumUs, durationUs);
-        if (durationUs > this.violationThresholdUs)
+        const violated = durationUs > this.violationThresholdUs;
+        if (violated)
             this.recentViolationUs = durationUs;
 
         const index = DURATION_BUCKETS_US.findIndex(bound => durationUs <= bound);
         this._buckets[index]++;
+        return violated;
     }
 
     /** Returns a serializable copy of the current summary. */
@@ -187,12 +194,12 @@ export class Diagnostics {
     /** Records one named synchronous phase duration. */
     recordDuration(name, durationUs) {
         if (this.mode === DIAGNOSTICS_MODES.OFF)
-            return;
+            return false;
 
         const phase = this._phases[name];
         if (!phase)
             throw new RangeError(`Unsupported diagnostic phase: ${name}`);
-        phase.observe(durationUs);
+        return phase.observe(durationUs);
     }
 
     /** Increments one named actor mutation counter. */
@@ -244,11 +251,14 @@ export class Diagnostics {
 }
 
 function phaseViolationThreshold(name) {
-    if (name === 'parse-validate-diff')
+    if (['parse-validate-diff', 'parse', 'validate', 'semantic-diff']
+        .includes(name))
         return 500;
     if (name === 'menu-build')
         return 8_000;
-    if (name === 'spawn-call' || name === 'child-wall' || name === 'pipe-drain')
+    if (name === 'spawn-call' || name === 'child-wall' ||
+        name === 'first-byte' || name === 'pipe-drain') {
         return Number.POSITIVE_INFINITY;
+    }
     return 1_000;
 }

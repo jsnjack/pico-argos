@@ -43,6 +43,7 @@ export class ExtensionController {
             this._diagnostics,
             {
                 refreshOnOpen: pluginId => this._runtime?.refreshOnOpen(pluginId),
+                restartStream: pluginId => this._runtime?.restartStream(pluginId),
                 openPreferences: () => this._extension.openPreferences(),
             });
         this._productionDiagnostics = new ProductionDiagnostics({
@@ -81,9 +82,10 @@ export class ExtensionController {
                 if (this._enabled && generation === this._generation)
                     this._recordRuntimeEvent(event);
             },
-            onPhase: (name, durationUs) => {
+            onPhase: (name, durationUs, pluginId = null) => {
                 if (this._enabled && generation === this._generation)
-                    this._diagnostics.recordDuration(name, durationUs);
+                    this._productionDiagnostics.recordPhase(
+                        name, durationUs, pluginId);
             },
             nextCycleId: () => this._diagnostics.nextCycleId(),
         });
@@ -109,7 +111,7 @@ export class ExtensionController {
         this._enabled = false;
         this._generation++;
         this._registry?.cancel();
-        this._runtime?.stop();
+        this._runtime?.destroy();
         this._coordinator?.stop();
         this._productionDiagnostics?.destroy();
         this._renderer?.destroy();

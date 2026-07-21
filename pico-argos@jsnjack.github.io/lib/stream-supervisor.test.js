@@ -127,9 +127,11 @@ timer.fireDelay(0);
 if (runner.starts.filter(id => id === 'stream-1').length !== 2)
     throw new Error('Manifest replacement did not relaunch the stream');
 
-supervisor.stop();
+supervisor.destroy();
 if (timer.sources.size !== 0)
     throw new Error('Supervisor stop leaked launch or restart sources');
 if (runner.active.size !== 0)
     throw new Error('Supervisor stop left active direct children');
+if (supervisor.snapshot().plugins.length !== 0)
+    throw new Error('Supervisor destroy retained plugin state');
 print('ok - stream supervisor serializes four children and bounded restarts');

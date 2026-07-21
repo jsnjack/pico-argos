@@ -38,6 +38,7 @@ export class PluginIndicator {
         this._menuEntries = new Map();
         this._menuSignalId = 0;
         this._footerSignalId = 0;
+        this._restartSignalId = 0;
         this._ownedActorCount = 0;
         this._panel = null;
         this._stale = false;
@@ -84,6 +85,24 @@ export class PluginIndicator {
         this.plugin = plugin;
         if (this._attached)
             this._applyReservedWidth();
+        if (this._menuBuilt) {
+            const isStream = plugin.manifest.mode === 'stream';
+            this._write(
+                this._restartItem,
+                'visible',
+                isStream,
+                'menu-property-writes');
+            this._write(
+                this._restartItem,
+                'reactive',
+                isStream,
+                'menu-property-writes');
+            this._write(
+                this._restartItem,
+                'can_focus',
+                isStream,
+                'menu-property-writes');
+        }
         if (this._panel !== null)
             this._applyStyle(this._panel.appearance, this._panel.severity, this._stale);
     }
@@ -117,6 +136,10 @@ export class PluginIndicator {
             this._footerItem.disconnect(this._footerSignalId);
             this._footerSignalId = 0;
         }
+        if (this._restartSignalId !== 0) {
+            this._restartItem.disconnect(this._restartSignalId);
+            this._restartSignalId = 0;
+        }
         this.actor.destroy();
         this._diagnostics.recordMutation('actor-destructions', this._ownedActorCount);
         this._ownedActorCount = 0;
@@ -125,6 +148,7 @@ export class PluginIndicator {
         this._icon = null;
         this._label = null;
         this._footerItem = null;
+        this._restartItem = null;
         this._actions = null;
     }
 
@@ -243,6 +267,16 @@ export class PluginIndicator {
         this._footerSeparator = new PopupMenu.PopupSeparatorMenuItem();
         this._recordCreation();
         this.actor.menu.addMenuItem(this._footerSeparator);
+        this._restartItem = new PopupMenu.PopupMenuItem('Restart stream', {
+            reactive: this.plugin.manifest.mode === 'stream',
+            can_focus: this.plugin.manifest.mode === 'stream',
+        });
+        this._restartItem.visible = this.plugin.manifest.mode === 'stream';
+        this._recordCreation();
+        this._restartSignalId = this._restartItem.connect(
+            'activate',
+            () => this._actions.restartStream(this.plugin.id));
+        this.actor.menu.addMenuItem(this._restartItem);
         this._footerItem = new PopupMenu.PopupMenuItem('Open pico-argos Preferences');
         this._recordCreation();
         this._footerSignalId = this._footerItem.connect(

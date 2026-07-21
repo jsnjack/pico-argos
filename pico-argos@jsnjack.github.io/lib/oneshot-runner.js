@@ -107,6 +107,10 @@ export class OneShotRunner {
             {
                 onFirstByte: () => {
                     context.firstStdoutUs ??= this._clock.nowUs();
+                    this._onPhase?.(
+                        'first-byte',
+                        context.firstStdoutUs - launchBeginUs,
+                        manifest.id);
                     this._emit(
                         'first-stdout-byte',
                         manifest.id,

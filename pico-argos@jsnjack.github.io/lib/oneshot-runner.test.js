@@ -9,9 +9,12 @@ const fixture = GLib.canonicalize_filename(
     'tests/fixtures/oneshot-fixture.js',
     GLib.get_current_dir());
 const events = [];
+const phases = [];
 const runner = new OneShotRunner({
     clock: new MonotonicClock(),
     onEvent: event => events.push(event),
+    onPhase: (name, durationUs, pluginId) =>
+        phases.push([name, durationUs, pluginId]),
 });
 
 function manifest(mode, overrides = {}) {
@@ -46,6 +49,9 @@ if (!(constant.details.runId > 0) || constant.details.stdoutBytes === 0 ||
     !events.some(event => event.kind === 'process-exit' &&
         event.runId === constant.details.runId))
     throw new Error('Runner did not correlate bounded process timing details');
+if (!phases.some(phase => phase[0] === 'first-byte' &&
+    phase[2] === 'fixture-constant'))
+    throw new Error('Runner omitted time-to-first-byte measurement');
 const chunked = await runner.run(manifest('chunked'));
 if (chunked.raw !== constant.raw)
     throw new Error('Runner changed output split across chunks');

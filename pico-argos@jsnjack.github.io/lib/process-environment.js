@@ -2,11 +2,13 @@
 
 import GLib from 'gi://GLib';
 
+const MINIMAL_PATH = '/usr/local/bin:/usr/bin:/bin';
+
 /** Builds the version 1 minimal environment for one plugin child. */
 export function buildPluginEnvironment(manifest, menuOpen = null) {
     const values = new Map([
         ['HOME', GLib.get_home_dir()],
-        ['PATH', GLib.getenv('PATH') ?? '/usr/local/bin:/usr/bin:/bin'],
+        ['PATH', MINIMAL_PATH],
         ['LANG', GLib.getenv('LANG') ?? 'C.UTF-8'],
         ['LC_ALL', GLib.getenv('LC_ALL') ?? ''],
         ['XDG_CONFIG_HOME', GLib.get_user_config_dir()],

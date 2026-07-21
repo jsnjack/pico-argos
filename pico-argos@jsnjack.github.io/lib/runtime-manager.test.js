@@ -75,6 +75,7 @@ const clock = new FakeClock();
 const oneShotRunner = new FakeOneShotRunner();
 const changes = [];
 const events = [];
+const phases = [];
 const added = [];
 const removed = [];
 const runtime = new RuntimeManager({
@@ -84,6 +85,8 @@ const runtime = new RuntimeManager({
     onChanges: (source, change, kind, _presentation, cycleId) =>
         changes.push([source.id, change, kind, cycleId]),
     onEvent: event => events.push(event),
+    onPhase: (name, durationUs, pluginId) =>
+        phases.push([name, durationUs, pluginId]),
     onPluginAdded: source => added.push(source.id),
     onPluginRemoved: source => removed.push(source.id),
 });
@@ -116,6 +119,10 @@ if (runtime.snapshot().plugins[0].lastCycleId !== 3)
 const acceptedEvents = events.filter(event => event.kind === 'snapshot-accepted');
 if (JSON.stringify(acceptedEvents.map(event => event.cycleId)) !== '[1,2,3]')
     throw new Error('Accepted snapshot cycle IDs are not monotonically increasing');
+for (const name of ['raw-compare', 'parse', 'validate', 'semantic-diff']) {
+    if (!phases.some(phase => phase[0] === name && phase[2] === 'fixture'))
+        throw new Error(`Runtime omitted the ${name} phase measurement`);
+}
 
 const invalid = new Error('fixture failed');
 invalid.kind = 'fixture';
@@ -138,7 +145,11 @@ if (runtime.snapshot().plugins[0].lastFailure === null)
     throw new Error('Manifest replacement did not revalidate reserved text');
 
 runtime.removePlugin('fixture');
-runtime.stop();
+runtime.destroy();
 if (JSON.stringify(removed) !== JSON.stringify(['fixture']))
     throw new Error('Runtime did not publish the removed plugin');
+if (runtime.snapshot().plugins.length !== 0 ||
+    runtime.snapshot().oneShot.plugins.length !== 0 ||
+    runtime.snapshot().streams.plugins.length !== 0)
+    throw new Error('Runtime destroy retained plugin or scheduler state');
 print('ok - runtime manager integrates scheduling, state, failures, and staleness');

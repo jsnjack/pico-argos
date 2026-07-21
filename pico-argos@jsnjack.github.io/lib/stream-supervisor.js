@@ -88,6 +88,14 @@ export class StreamSupervisor {
         this._runner.cancelAll();
     }
 
+    /** Stops supervision and releases all retained plugin records. */
+    destroy() {
+        this.stop();
+        this._states.clear();
+        this._onMessage = null;
+        this._onEvent = null;
+    }
+
     /** Clears a lockout and restarts one stream on explicit user request. */
     restart(pluginId) {
         const state = this._states.get(pluginId);

@@ -155,8 +155,8 @@ function validateHttpsUri(value, context) {
     let uri;
     try {
         uri = GLib.Uri.parse(value, GLib.UriFlags.NONE);
-    } catch (error) {
-        throw new ProtocolError(`${context} URI is invalid: ${error.message}`);
+    } catch (_error) {
+        throw new ProtocolError(`${context} URI is invalid`);
     }
     if (uri.get_scheme()?.toLowerCase() !== 'https')
         throw new ProtocolError(`${context} URI must use HTTPS`);

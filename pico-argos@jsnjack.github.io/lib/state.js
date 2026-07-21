@@ -85,14 +85,21 @@ export class StateStore {
             ...parserOptions
         } = options;
         observe?.('parse-begin');
-        const message = this._parser(raw, parserOptions);
-        observe?.('parse-end');
+        let message;
+        try {
+            message = this._parser(raw, parserOptions);
+        } finally {
+            observe?.('parse-end');
+        }
         if (message.kind === 'heartbeat') {
             observe?.('validate-end');
             return {message, state: null};
         }
-        validateSnapshot?.(message.snapshot);
-        observe?.('validate-end');
+        try {
+            validateSnapshot?.(message.snapshot);
+        } finally {
+            observe?.('validate-end');
+        }
 
         const snapshot = message.snapshot;
         const changes = previous === undefined

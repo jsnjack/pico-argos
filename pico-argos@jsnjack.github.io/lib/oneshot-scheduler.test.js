@@ -104,7 +104,10 @@ if (!resumed.plugins.every(plugin => plugin.nextDueUs > clock.valueUs))
 if (!resumed.plugins.some(plugin => plugin.skipped > 0))
     throw new Error('Resume did not count skipped deadlines');
 
-scheduler.stop();
+scheduler.destroy();
 if (timer.sources.size !== 0)
     throw new Error('Scheduler stop leaked its deadline source');
+if (scheduler.snapshot().plugins.length !== 0 ||
+    scheduler.snapshot().activePluginId !== null)
+    throw new Error('Scheduler destroy retained plugin state');
 print('ok - one-shot scheduler phases deadlines and serializes bounded work');

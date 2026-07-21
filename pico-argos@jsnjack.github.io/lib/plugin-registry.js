@@ -21,6 +21,9 @@ const SECURITY_ATTRIBUTES = [
     Gio.FILE_ATTRIBUTE_STANDARD_SIZE,
     Gio.FILE_ATTRIBUTE_UNIX_UID,
     Gio.FILE_ATTRIBUTE_UNIX_MODE,
+    Gio.FILE_ATTRIBUTE_UNIX_INODE,
+    Gio.FILE_ATTRIBUTE_TIME_MODIFIED,
+    Gio.FILE_ATTRIBUTE_TIME_MODIFIED_USEC,
     Gio.FILE_ATTRIBUTE_ACCESS_CAN_EXECUTE,
 ].join(',');
 
@@ -159,6 +162,7 @@ export class PluginRegistry {
         }
         const manifest = parseManifest(raw, directory.get_path(), candidate.name);
 
+        let executableIdentity = null;
         if (manifest.command[0].includes('/')) {
             const executable = Gio.File.new_for_path(manifest.command[0]);
             const executableInfo = await queryInfo(
@@ -167,12 +171,19 @@ export class PluginRegistry {
                 executableInfo, this._userId, false, `Plugin ${candidate.name} executable`);
             if (!executableInfo.get_attribute_boolean(Gio.FILE_ATTRIBUTE_ACCESS_CAN_EXECUTE))
                 throw new Error(`Plugin ${candidate.name} executable is not executable`);
+            executableIdentity = [
+                executableInfo.get_attribute_uint64(Gio.FILE_ATTRIBUTE_UNIX_INODE),
+                executableInfo.get_size(),
+                executableInfo.get_attribute_uint64(Gio.FILE_ATTRIBUTE_TIME_MODIFIED),
+                executableInfo.get_attribute_uint32(Gio.FILE_ATTRIBUTE_TIME_MODIFIED_USEC),
+            ].join(':');
         }
 
         return Object.freeze({
             id: candidate.name,
             directory: directory.get_path(),
             manifest,
+            executableIdentity,
         });
     }
 
@@ -272,8 +283,11 @@ export class PluginRegistry {
             this._onChange?.({kind: 'error', id, message: `Plugin limit ${MAX_PLUGINS} reached`});
             return;
         }
-        if (previous !== null && JSON.stringify(previous.manifest) === JSON.stringify(plugin.manifest))
+        if (previous !== null &&
+            JSON.stringify(previous.manifest) === JSON.stringify(plugin.manifest) &&
+            previous.executableIdentity === plugin.executableIdentity) {
             return;
+        }
 
         this._known.set(id, plugin);
         this._monitorPlugin(id);

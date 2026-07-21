@@ -36,6 +36,7 @@ export class ProductionDiagnostics {
         this._traceTimerId = 0;
         this._traceExporter = null;
         this._lastTraceLogUs = null;
+        this._slowPhaseLogs = new Map();
     }
 
     enable() {
@@ -54,8 +55,9 @@ export class ProductionDiagnostics {
 
     /** Records the one coalesced UI phase and arms stage hooks only on writes. */
     recordBatch(batch) {
-        this._diagnostics.recordDuration('ui-queue-wait', batch.queueWaitUs);
-        this._diagnostics.recordDuration('ui-apply', batch.applyEndUs - batch.applyBeginUs);
+        this.recordPhase('ui-queue-wait', batch.queueWaitUs, 'render');
+        this.recordPhase(
+            'ui-apply', batch.applyEndUs - batch.applyBeginUs, 'render');
         if (batch.writes === 0)
             return;
         const cycleId = batch.cycleId;
@@ -68,6 +70,22 @@ export class ProductionDiagnostics {
             batch.applyEndUs,
             cycleId);
         this._stageTrace.arm(cycleId);
+    }
+
+    /** Records one phase and rate-limits warnings for threshold violations. */
+    recordPhase(name, durationUs, pluginId = null) {
+        const violated = this._diagnostics.recordDuration(name, durationUs);
+        if (!violated)
+            return;
+        const key = `${pluginId ?? 'global'}:${name}`;
+        const nowUs = this._clock.nowUs();
+        const lastUs = this._slowPhaseLogs.get(key);
+        if (lastUs !== undefined && nowUs - lastUs < 60_000_000)
+            return;
+        this._slowPhaseLogs.set(key, nowUs);
+        console.warn(
+            `[pico-argos] Slow ${name} phase for ${pluginId ?? 'global'}: ` +
+            `${durationUs} µs`);
     }
 
     startTrace(durationSeconds) {
@@ -104,9 +122,7 @@ export class ProductionDiagnostics {
             registryErrors: this._getRegistryErrors(),
         };
         const json = JSON.stringify(document);
-        this._diagnostics.recordDuration(
-            'get-summary',
-            this._clock.nowUs() - startedUs);
+        this.recordPhase('get-summary', this._clock.nowUs() - startedUs);
         if (new TextEncoder().encode(json).length > MAX_SUMMARY_BYTES)
             throw new Error(`Diagnostic summary exceeds ${MAX_SUMMARY_BYTES} bytes`);
         return json;
@@ -128,6 +144,7 @@ export class ProductionDiagnostics {
             this._diagnostics.stopTrace(this._timing());
         this._traceExporter?.cancel();
         this._traceExporter = null;
+        this._slowPhaseLogs.clear();
         this._settings = null;
     }
 
@@ -141,7 +158,7 @@ export class ProductionDiagnostics {
             traceData,
             document,
             {
-                onSlice: durationUs => this._diagnostics.recordDuration(
+                onSlice: durationUs => this.recordPhase(
                     'trace-serialize', durationUs),
                 onComplete: path => {
                     this._traceExporter = null;

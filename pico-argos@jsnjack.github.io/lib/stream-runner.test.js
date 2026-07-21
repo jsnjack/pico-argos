@@ -10,9 +10,12 @@ const fixture = GLib.canonicalize_filename(
     'tests/fixtures/stream-fixture.js',
     GLib.get_current_dir());
 const events = [];
+const phases = [];
 const runner = new StreamRunner({
     clock: new MonotonicClock(),
     onEvent: event => events.push(event),
+    onPhase: (name, durationUs, pluginId) =>
+        phases.push([name, durationUs, pluginId]),
 });
 
 function manifest(mode, overrides = {}) {
@@ -57,6 +60,9 @@ const messageRunIds = new Set(events
 if (messageRunIds.size !== 1 ||
     !events.some(event => event.kind === 'stream-heartbeat'))
     throw new Error('Stream messages did not retain run and sequence correlation');
+if (!phases.some(phase => phase[0] === 'first-byte' &&
+    phase[2] === 'fixture-messages'))
+    throw new Error('Stream omitted time-to-first-byte measurement');
 
 let splitText = null;
 await expectFailure('split-utf8', 'stdout-eof', {}, {

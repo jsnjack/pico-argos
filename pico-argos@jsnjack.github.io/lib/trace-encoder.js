@@ -8,17 +8,30 @@ export class TraceEncoder {
     constructor(document, trace) {
         this._trace = trace;
         this._eventIndex = 0;
-        this._prefix = `${JSON.stringify(document).slice(0, -1)},"events":[`;
-        this._prefixPending = true;
+        this._entries = Object.entries(document);
+        this._entryIndex = 0;
+        this._documentStartPending = true;
+        this._eventsStartPending = true;
         this._suffixPending = true;
     }
 
     /** Returns the next bounded JSON chunk, or null after completion. */
     nextChunk(clock, sliceBudgetUs = DEFAULT_SLICE_BUDGET_US,
         maximumChunkChars = DEFAULT_CHUNK_CHARS) {
-        if (this._prefixPending) {
-            this._prefixPending = false;
-            return this._prefix;
+        if (this._documentStartPending) {
+            this._documentStartPending = false;
+            return '{';
+        }
+
+        if (this._entryIndex < this._entries.length) {
+            const [key, value] = this._entries[this._entryIndex++];
+            const separator = this._entryIndex === 1 ? '' : ',';
+            return `${separator}${JSON.stringify(key)}:${JSON.stringify(value)}`;
+        }
+
+        if (this._eventsStartPending) {
+            this._eventsStartPending = false;
+            return `${this._entries.length === 0 ? '' : ','}"events":[`;
         }
 
         if (this._eventIndex < this._trace.length) {
