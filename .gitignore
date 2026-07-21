@@ -2,5 +2,6 @@
 /dist/
 /node_modules/
 /coverage/
+.monova.history
 *.zip
 gschemas.compiled

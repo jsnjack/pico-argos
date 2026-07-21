@@ -159,11 +159,14 @@ export class PluginIndicator {
         let writes = 0;
         const panelVisible = panel !== null && panel.visible;
         if (panelVisible && panel.text !== null) {
-            writes += this._write(
+            const textWrites = this._write(
                 this._label,
                 'text',
                 panel.text,
                 'label-text-writes');
+            writes += textWrites;
+            if (textWrites !== 0)
+                this.actor.queue_redraw();
         }
         writes += this._write(
             this._label,

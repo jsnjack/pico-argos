@@ -54,12 +54,20 @@ export default class ActorHarnessExtension extends Extension {
             actions);
         Main.panel.addToStatusArea(TEST_ROLE, this._indicator.actor, 0, 'right');
         this._indicator.attach();
+        let panelRedraws = 0;
+        const queuePanelRedraw = this._indicator.actor.queue_redraw.bind(
+            this._indicator.actor);
+        this._indicator.actor.queue_redraw = () => {
+            panelRedraws++;
+            queuePanelRedraw();
+        };
 
         this._assertMenuOpensBeforeAnyContent(actions);
 
         const initial = presentation('00000', baseMenu());
         this._indicator.applyPresentation(initial);
         const initialized = mutations(this._diagnostics);
+        const initializedRedraws = panelRedraws;
         assert(initialized['actor-creations'] === 8,
             'Panel initialization did not create exactly eight owned actors ' +
             '(four persistent leaves plus the four eagerly built footer items)');
@@ -70,12 +78,17 @@ export default class ActorHarnessExtension extends Extension {
             mutations(this._diagnostics),
             initialized,
             'Identical refreshes mutated actor properties');
+        assert(panelRedraws === initializedRedraws,
+            'Identical refreshes queued panel redraws');
 
         for (let index = 0; index < 10_000; index++) {
             this._indicator.applyPresentation(
                 presentation(String(index).padStart(5, '0'), baseMenu()));
         }
         const changed = mutations(this._diagnostics);
+        assert(panelRedraws - initializedRedraws ===
+            changed['label-text-writes'] - initialized['label-text-writes'],
+        'Changed panel text did not queue exactly one full panel redraw per write');
         assert(changed['actor-creations'] === initialized['actor-creations'] &&
             changed['actor-destructions'] === initialized['actor-destructions'],
         'Changing text created or destroyed an actor');
