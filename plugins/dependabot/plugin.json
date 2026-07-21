@@ -9,7 +9,7 @@
   "position": "right",
   "order": 10,
   "nice": 10,
-  "reserveTextChars": 3,
+  "reserveTextChars": 5,
   "passEnvironment": ["GITHUB_TOKEN", "GITHUB_REPOSITORY"],
   "failurePolicy": "keep-last",
   "maxStaleMs": 7200000

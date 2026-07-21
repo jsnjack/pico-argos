@@ -11,7 +11,8 @@ const visible = dependabotSnapshot([
     {state: 'dismissed', security_advisory: {severity: 'critical'}},
     {state: 'open', security_advisory: {severity: 'high'}},
 ], repository);
-if (visible.panel.text !== '1' || visible.panel.severity !== 'critical' ||
+if (visible.panel.text !== '1 🤖' || visible.panel.severity !== 'critical' ||
+    visible.menu[0].text !== 'View Vulnerabilities' ||
     !visible.menu[0].uri.startsWith('https://github.com/example/project/'))
     throw new Error('Dependabot critical state is incorrect');
 print('ok - Dependabot plugin hides zero and links critical alerts');

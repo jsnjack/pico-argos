@@ -15,8 +15,7 @@ export function dependabotSnapshot(alerts, repository) {
         panel: count === 0
             ? null
             : {
-                text: String(count),
-                icon: 'software-update-available-symbolic',
+                text: `${count} 🤖`,
                 appearance: 'compact',
                 accessibleName: `${count} critical dependency ${count === 1 ? 'alert' : 'alerts'}`,
                 severity: 'critical',
@@ -24,7 +23,7 @@ export function dependabotSnapshot(alerts, repository) {
         menu: [{
             id: 'alerts',
             kind: 'link',
-            text: 'View critical Dependabot alerts',
+            text: 'View Vulnerabilities',
             uri,
         }],
     };

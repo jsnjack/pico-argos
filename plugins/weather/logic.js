@@ -1,97 +1,125 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-/** Converts one Open-Meteo response into current/forecast protocol state. */
-export function weatherSnapshot(data, location) {
-    const current = data?.current;
-    const hourly = data?.hourly;
-    requireNumber(current?.temperature_2m, 'current temperature');
-    requireNumber(current?.apparent_temperature, 'apparent temperature');
-    requireNumber(current?.precipitation, 'current precipitation');
-    requireNumber(current?.weather_code, 'weather code');
-    if (!Array.isArray(hourly?.time) || !Array.isArray(hourly.temperature_2m) ||
-        !Array.isArray(hourly.rain) || !Array.isArray(hourly.uv_index))
-        throw new Error('Weather hourly forecast arrays are missing');
+/** Converts one weather.yauhen.cc glance response into protocol state. */
+export function weatherSnapshot(data) {
+    const temperature = data?.temperature;
+    const feelsLike = data?.feels_like;
+    const uvIndex = data?.uv_index;
+    const location = data?.location?.description;
+    requireNumber(temperature?.now, 'current temperature');
+    requireNumber(temperature?.end, 'two-hour temperature');
+    requireNumber(feelsLike?.now, 'apparent temperature');
+    requireNumber(uvIndex?.now, 'UV index');
+    requireText(location, 'location');
+    requireText(data?.condition, 'condition');
 
-    const rain = current.precipitation;
-    const indicator = rain <= 0 ? '·' : rain < 1 ? '▴' : '▲';
-    const temperature = Math.round(current.temperature_2m);
+    const rainData = data?.buienalarm?.data;
+    if (!Array.isArray(rainData))
+        throw new Error('Weather rain timeline is missing');
+    const timeline = rainData.map((entry, index) => {
+        requireNumber(entry?.value, `rain value ${index}`);
+        if (entry.value < 0)
+            throw new Error(`Weather rain value ${index} is invalid`);
+        return {time: formatTime(entry?.time), value: entry.value};
+    });
+    const peak = timeline.reduce((maximum, entry) => Math.max(maximum, entry.value), 0);
+    const rainDots = peak <= 0.05 ? '' : peak < 0.25 ? ' ·' : peak < 1 ? ' ··' : ' ···';
+    const current = formatNumber(temperature.now);
     const menu = [
         label('location', location),
-        label('current', `Current ${formatTemperature(current.temperature_2m)}`),
-        label('apparent', `Feels like ${formatTemperature(current.apparent_temperature)}`),
-        label('two-hour', `In two hours ${formatTemperature(hourly.temperature_2m[2])}`),
-        label('uv', `UV index ${formatNumber(hourly.uv_index[0])}`),
-        label('rain', rain <= 0 ? 'No current rain' : `Current rain ${formatNumber(rain)} mm`),
+        {id: 'details-separator', kind: 'separator'},
+        label('current', `  Now           ${current}° (feels ${formatNumber(feelsLike.now)}°)`),
+        label('two-hour', `  In 2 hours    ${formatNumber(temperature.end)}°`),
+        label('uv', `  UV Index      ${formatNumber(uvIndex.now)}`),
     ];
-    const timeline = hourly.rain.slice(0, 12)
-        .map((amount, index) => ({amount, time: hourly.time[index]}))
-        .filter(entry => Number.isFinite(entry.amount) && entry.amount > 0)
-        .slice(0, 8);
-    if (timeline.length !== 0) {
-        menu.push({id: 'rain-separator', kind: 'separator'});
-        timeline.forEach((entry, index) => menu.push(label(
-            `rain-${index}`,
-            `${formatTime(entry.time)} rain ${formatNumber(entry.amount)} mm`)));
+
+    const description = data?.buienalarm?.desc;
+    if (description !== undefined && description !== null && description !== '') {
+        requireText(description, 'rain description');
+        menu.push({id: 'description-separator', kind: 'separator'});
+        menu.push(label('rain-description', `  ${description}`));
     }
+
+    const nonzero = timeline.filter(entry => entry.value > 0).slice(0, 53);
+    if (peak > 0.05) {
+        menu.push({id: 'rain-separator', kind: 'separator'});
+        menu.push(label('rain-heading', '  Rain (next 2h):'));
+        nonzero.forEach((entry, index) => menu.push(label(
+            `rain-${index}`,
+            `    ${entry.time}  ${formatNumber(entry.value)} mm/h`)));
+    }
+
     return {
         version: 1,
         type: 'snapshot',
         panel: {
-            text: `${temperature}°C ${indicator}`,
-            icon: weatherIcon(current.weather_code),
+            text: `${current}°${rainDots}`,
+            icon: weatherIcon(data.condition),
             appearance: 'compact',
-            accessibleName: `${location}, ${temperature} degrees Celsius, ${rainDescription(rain)}`,
+            accessibleName: `${location}, ${current} degrees, ${rainDescription(peak)}`,
             severity: 'normal',
         },
         menu,
     };
 }
 
-function weatherIcon(code) {
-    if (code === 0)
-        return 'weather-clear-symbolic';
-    if ([1, 2].includes(code))
-        return 'weather-few-clouds-symbolic';
-    if (code === 3 || [45, 48].includes(code))
-        return 'weather-overcast-symbolic';
-    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82))
-        return 'weather-showers-symbolic';
-    if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86))
-        return 'weather-snow-symbolic';
-    if (code >= 95)
-        return 'weather-storm-symbolic';
-    return 'weather-severe-alert-symbolic';
+function weatherIcon(condition) {
+    switch (condition) {
+        case 'clear':
+            return 'weather-clear-symbolic';
+        case 'partly_cloudy':
+            return 'weather-few-clouds-symbolic';
+        case 'overcast':
+            return 'weather-overcast-symbolic';
+        case 'fog':
+            return 'weather-fog-symbolic';
+        case 'drizzle':
+        case 'rain':
+            return 'weather-showers-symbolic';
+        case 'snow':
+            return 'weather-snow-symbolic';
+        case 'thunderstorm':
+            return 'weather-storm-symbolic';
+        default:
+            return 'weather-clear-symbolic';
+    }
 }
 
-function rainDescription(amount) {
-    if (amount <= 0)
+function rainDescription(peak) {
+    if (peak <= 0.05)
         return 'no rain';
-    if (amount < 1)
+    if (peak < 0.25)
         return 'light rain';
-    return 'rain';
+    if (peak < 1)
+        return 'rain';
+    return 'heavy rain';
 }
 
 function label(id, text) {
     return {id, kind: 'label', text};
 }
 
-function formatTemperature(value) {
-    requireNumber(value, 'forecast temperature');
-    return `${Math.round(value)}°C`;
-}
-
 function formatNumber(value) {
-    requireNumber(value, 'forecast value');
-    return Number(value).toFixed(1).replace(/\.0$/, '');
+    requireNumber(value, 'numeric value');
+    return String(value);
 }
 
 function formatTime(value) {
-    if (typeof value !== 'string' || !value.includes('T'))
-        throw new Error('Weather timeline time is invalid');
-    return value.split('T')[1].slice(0, 5);
+    if (typeof value !== 'string')
+        throw new Error('Weather rain timeline time is invalid');
+    const match = /T(\d{2}):(\d{2})/.exec(value);
+    if (match === null)
+        throw new Error('Weather rain timeline time is invalid');
+    return `${match[1]}:${match[2]}`;
 }
 
 function requireNumber(value, context) {
     if (!Number.isFinite(value))
+        throw new Error(`Weather ${context} is invalid`);
+}
+
+function requireText(value, context) {
+    if (typeof value !== 'string' || value.length === 0 || [...value].length > 512 ||
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value))
         throw new Error(`Weather ${context} is invalid`);
 }

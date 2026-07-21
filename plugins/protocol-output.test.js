@@ -15,19 +15,13 @@ const snapshots = [
     systemSnapshot({cpu: 10, memory: 20, disk: 30, receive: 1_000, transmit: 2_000}),
     vpnSnapshot({protected: true, country_code: 'NL'}),
     weatherSnapshot({
-        current: {
-            temperature_2m: 12,
-            apparent_temperature: 11,
-            precipitation: 0,
-            weather_code: 1,
-        },
-        hourly: {
-            time: ['2026-07-20T10:00', '2026-07-20T11:00', '2026-07-20T12:00'],
-            temperature_2m: [12, 13, 14],
-            rain: [0, 0, 0],
-            uv_index: [3, 4, 5],
-        },
-    }, 'Amsterdam'),
+        temperature: {now: 12, end: 14},
+        feels_like: {now: 11},
+        uv_index: {now: 3},
+        condition: 'partly_cloudy',
+        location: {description: 'Amsterdam'},
+        buienalarm: {data: [{time: '2026-07-20T10:00', value: 0}]},
+    }),
 ];
 for (const snapshot of snapshots) {
     const parsed = parseProtocolMessage(JSON.stringify(snapshot));

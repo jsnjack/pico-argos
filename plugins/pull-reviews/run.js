@@ -17,12 +17,16 @@ try {
         throw new Error('GITHUB_REPOSITORIES must list at most 20 owner/name values');
     if (!/^[A-Za-z0-9-]+$/.test(user))
         throw new Error('GITHUB_USER is invalid');
+    const issueRepository = GLib.getenv('GITHUB_ISSUE_REPOSITORY') ?? 'surfly/it';
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(issueRepository))
+        throw new Error('GITHUB_ISSUE_REPOSITORY must have owner/name form');
     const repositoryQuery = repositories.map(value => `repo:${value}`).join(' ');
     const searchQuery = `is:pr is:open draft:false review-requested:${user} ${repositoryQuery}`;
     const data = requestGraphql(token, searchQuery);
     if (Array.isArray(data.errors) && data.errors.length !== 0)
         throw new Error('GitHub GraphQL returned an error');
-    print(JSON.stringify(pullReviewsSnapshot(data.data?.search, user, repositories)));
+    print(JSON.stringify(pullReviewsSnapshot(
+        data.data?.search, user, repositories, issueRepository)));
 } catch (error) {
     printerr(`[pull-reviews] ${error.message}`);
     System.exit(1);

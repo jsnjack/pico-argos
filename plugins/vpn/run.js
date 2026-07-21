@@ -9,7 +9,7 @@ import {vpnSnapshot} from './logic.js';
 
 try {
     const uri = GLib.getenv('VPN_STATUS_URL') ??
-        'https://nordvpn.com/wp-admin/admin-ajax.php?action=get_user_info_data';
+        'https://web-api.nordvpn.com/v1/ips/info';
     if (!uri.startsWith('https://'))
         throw new Error('VPN_STATUS_URL must use HTTPS');
     const message = Soup.Message.new('GET', uri);

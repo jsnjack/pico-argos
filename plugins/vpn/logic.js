@@ -12,12 +12,12 @@ export function vpnSnapshot(status) {
         type: 'snapshot',
         panel: status.protected
             ? {
-                icon: 'network-vpn-symbolic',
+                icon: 'weather-snow-symbolic',
                 appearance: 'compact',
                 accessibleName: `VPN protected in ${country}`,
                 severity: 'normal',
             }
             : null,
-        menu: [{id: 'country', kind: 'label', text: `Protected country: ${country}`}],
+        menu: [{id: 'country', kind: 'label', text: `Connected to ${country}`}],
     };
 }
