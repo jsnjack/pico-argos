@@ -83,6 +83,18 @@ period, and — when a core opt-in trace JSON is supplied and its clock is
 one-hour run at 120 Hz produces about 432,000 presented-frame lines (roughly
 100 MB at this probe's line size), comfortably inside both limits.
 
+**Known limitation on real hardware:** per version 1 of the presentation-time
+protocol, a compositor reports `refresh = 0` whenever an output's rate isn't
+guaranteed constant — which includes VRR/Adaptive-Sync-capable displays even
+when VRR isn't actively engaged. On such a display every captured frame has
+`refreshNanoseconds: 0` (confirmed against this project's own dual-120-Hz
+outputs), so the long-interval count and refresh-period histogram above read
+as empty/zero unconditionally — this reflects the protocol working as
+specified, not jank-free delivery. It does not affect delivered FPS or the
+paired-comparison confidence interval in step 4, which remain authoritative.
+The nested virtual-monitor test fixture is not VRR-capable and reports real
+refresh periods, so this only applies to live acceptance runs.
+
 ## 4. Compare paired runs
 
 ```bash

@@ -1239,7 +1239,10 @@ Release criteria:
 - Constant output has zero update-correlated stage mutation after initialization.
 - Enabling an empty extension is statistically indistinguishable from baseline.
 - No scenario introduces a recurring cluster of long presentation intervals
-  correlated with plugin cycles.
+  correlated with plugin cycles. On a VRR/Adaptive-Sync-capable display this
+  clustering signal is structurally unavailable per Section 18 item 19; the
+  delivered-frame-rate criterion below remains the authoritative gate on such
+  hardware.
 - Full workload changes average delivered frame rate by no more than 0.1% versus
   interleaved baseline, with confidence intervals reported.
 - No extension phase exceeds the release-failure thresholds in Section 3 under
@@ -1287,6 +1290,16 @@ Release criteria:
     intentionally abusive executable from affecting the system.
 18. Only direct children are supervised. Plugins must stay in the foreground,
     flush complete JSON lines, and must not daemonize or fork background workers.
+19. Per version 1 of the presentation-time protocol, a compositor MUST report
+    `refresh = 0` whenever an output's refresh rate is not guaranteed constant,
+    which includes VRR/Adaptive-Sync-capable outputs whether or not VRR is
+    actively engaged. On such real displays, the acceptance tooling's
+    long-presentation-interval clustering (Section 17.5) observes `refresh = 0`
+    on every frame and reports zero long intervals unconditionally; this is
+    the protocol working as specified, not evidence of jank-free delivery. The
+    nested virtual-monitor test fixture is not VRR-capable and is unaffected.
+    Delivered-frame-rate comparison and its confidence interval do not depend
+    on the refresh field and remain authoritative on real hardware.
 
 ## 19. Delivery Order
 
