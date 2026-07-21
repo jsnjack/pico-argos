@@ -270,7 +270,7 @@ reference defaults are compatibility constraints:
 | system monitor | Linux `/proc` and `/sys` counters | legacy `cpu`/`mem`/`io`, arrows, `KBs`/`MBs`, and 13 px monospace remain the default; compact is opt-in |
 | Dependabot | GitHub Dependabot alerts API | hidden at zero; urgent-update symbolic icon and count; up to five direct alert links |
 | pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
-| VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; snowflake symbolic icon (avoids duplicating GNOME's own generic VPN icon); private country/city details with no public IP |
+| VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; literal `❄` glyph text (avoids duplicating GNOME's own generic VPN icon and the weather plugin's cloud icons); private country/city details with no public IP |
 | weather | `https://weather.yauhen.cc/api/v1/glance` | center placement, temperature/rain dots/condition icon, concise details, and bounded rain timing |
 
 The `weather.yauhen.cc` source is deliberate. **Do not replace, proxy, or add a
