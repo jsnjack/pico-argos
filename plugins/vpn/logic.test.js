@@ -11,7 +11,7 @@ const protectedState = vpnSnapshot({
     city: 'Amsterdam',
     ip: '192.0.2.1',
 });
-if (protectedState.panel.icon !== 'network-vpn-symbolic' ||
+if (protectedState.panel.icon !== 'weather-snow-symbolic' ||
     protectedState.menu[0].text !== 'Connected to NL' ||
     protectedState.menu[1].text !== 'Location: Amsterdam, Netherlands' ||
     JSON.stringify(protectedState).includes('192.0.2.1'))

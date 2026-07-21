@@ -24,7 +24,7 @@ export function vpnSnapshot(status) {
         type: 'snapshot',
         panel: status.protected
             ? {
-                icon: 'network-vpn-symbolic',
+                icon: 'weather-snow-symbolic',
                 appearance: 'compact',
                 accessibleName: `VPN protected in ${location || countryCode}`,
                 severity: 'normal',
