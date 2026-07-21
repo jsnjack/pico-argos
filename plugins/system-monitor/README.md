@@ -20,3 +20,11 @@ uppercase, abbreviated-rate layout; both layouts remain fixed-width. Optional
 per-metric warning and critical thresholds change only the extension-owned
 severity style. The menu aligns detailed values and identifies the resolved
 block device and network interface without adding recurring work.
+
+For physical acceptance only, `diagnosticTracePath` may be set to an absolute
+path in an already-created private directory. The plugin then retains at most
+16,384 numeric fast-cycle records and exports them when it receives SIGINT or
+SIGTERM. Each record correlates the scheduled 250-ms deadline, sample,
+formatting, pipe-write, and output sequence timestamps with the extension's
+bounded trace. It is disabled by default and does no allocation or file output
+on ordinary runs.

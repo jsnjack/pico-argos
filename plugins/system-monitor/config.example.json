@@ -6,6 +6,7 @@
   "diskDevice": "auto",
   "networkInterface": "auto",
   "presentation": "legacy",
+  "diagnosticTracePath": null,
   "thresholds": {
     "cpu": {"warning": 85, "critical": 95},
     "memory": {"warning": 85, "critical": 95},

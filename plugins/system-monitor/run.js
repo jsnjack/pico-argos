@@ -15,6 +15,7 @@ import {
     parseNetworkCounters,
     systemSnapshot,
 } from './metrics.js';
+import {SystemTimingTrace} from './timing-trace.js';
 
 const MAX_FILE_BYTES = 64 * 1_024;
 const MAX_EMITS_PER_SECOND = 5;
@@ -63,6 +64,9 @@ class SampleBudget {
 }
 
 const config = loadConfig();
+const timingTrace = config.diagnosticTracePath === null
+    ? null
+    : new SystemTimingTrace(config.diagnosticTracePath);
 const selectedFields = new Set(config.fields);
 const readers = {
     cpu: new StableReader('/proc/stat'),
@@ -113,10 +117,25 @@ let nextMemoryUs = selectedFields.has('memory')
     : Number.POSITIVE_INFINITY;
 let lastEmissionUs = startedUs;
 let lastSnapshot = null;
+let outputSequence = 0;
 
 monitorResolutionChanges();
+const mainLoop = new GLib.MainLoop(null, false);
+if (timingTrace !== null) {
+    for (const signal of [2, 15]) {
+        GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal, () => {
+            try {
+                timingTrace.export();
+            } catch (error) {
+                printerr(`[system-monitor] Timing trace export failed: ${error.message}`);
+            }
+            mainLoop.quit();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+}
 schedule();
-new GLib.MainLoop(null, false).run();
+mainLoop.run();
 
 function schedule() {
     const nowUs = GLib.get_monotonic_time();
@@ -134,7 +153,9 @@ function sample() {
     const nowUs = GLib.get_monotonic_time();
     const budget = new SampleBudget();
     let sampled = false;
+    let fastDeadlineUs = 0;
     if (nowUs >= nextFastUs) {
+        fastDeadlineUs = nextFastUs;
         sampleFast(nowUs, budget);
         nextFastUs = advanceDeadline(nextFastUs, config.fastIntervalMs, nowUs);
         sampled = true;
@@ -152,21 +173,43 @@ function sample() {
         sampled = true;
     }
 
+    const sampleEndUs = GLib.get_monotonic_time();
+    let formatBeginUs = 0;
+    let formatEndUs = 0;
+    let writeBeginUs = 0;
+    let writeEndUs = 0;
+    let snapshotSequence = 0;
+
     if (sampled && nowUs - lastEmissionUs >= 1_000_000 / MAX_EMITS_PER_SECOND) {
+        formatBeginUs = GLib.get_monotonic_time();
         const snapshot = JSON.stringify(systemSnapshot(metrics, config.fields, {
             presentation: config.presentation,
             thresholds: config.thresholds,
             diskDevice,
             networkInterface,
         }));
+        formatEndUs = GLib.get_monotonic_time();
         if (snapshot !== lastSnapshot) {
-            writeLine(snapshot);
+            writeBeginUs = GLib.get_monotonic_time();
+            snapshotSequence = writeLine(snapshot);
+            writeEndUs = GLib.get_monotonic_time();
             lastSnapshot = snapshot;
             lastEmissionUs = nowUs;
-            return;
         }
     }
-    if (nowUs - lastEmissionUs >= HEARTBEAT_INTERVAL_US) {
+    if (fastDeadlineUs !== 0) {
+        timingTrace?.record([
+            fastDeadlineUs,
+            nowUs,
+            sampleEndUs,
+            formatBeginUs,
+            formatEndUs,
+            writeBeginUs,
+            writeEndUs,
+            snapshotSequence,
+        ]);
+    }
+    if (snapshotSequence === 0 && nowUs - lastEmissionUs >= HEARTBEAT_INTERVAL_US) {
         writeLine('{"version":1,"type":"heartbeat"}');
         lastEmissionUs = nowUs;
     }
@@ -277,6 +320,7 @@ function loadConfig() {
         networkInterface: 'auto',
         presentation: 'legacy',
         thresholds: {},
+        diagnosticTracePath: null,
     };
     let value = {};
     try {
@@ -296,6 +340,7 @@ function loadConfig() {
         'networkInterface',
         'presentation',
         'thresholds',
+        'diagnosticTracePath',
     ]);
     const unknown = Object.keys(value).find(key => !allowed.has(key));
     if (unknown !== undefined)
@@ -315,6 +360,11 @@ function loadConfig() {
     }
     if (!['legacy', 'compact'].includes(result.presentation))
         throw new Error('presentation must be legacy or compact');
+    if (result.diagnosticTracePath !== null &&
+        (typeof result.diagnosticTracePath !== 'string' ||
+            !GLib.path_is_absolute(result.diagnosticTracePath))) {
+        throw new Error('diagnosticTracePath must be null or an absolute path');
+    }
     result.thresholds = validateThresholds(result.thresholds);
     return result;
 }
@@ -476,4 +526,6 @@ function readBoundedStream(stream, budget, context) {
 
 function writeLine(value) {
     output.write_all(encoder.encode(`${value}\n`), null);
+    outputSequence++;
+    return outputSequence;
 }
