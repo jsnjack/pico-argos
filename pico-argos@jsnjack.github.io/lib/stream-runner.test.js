@@ -60,6 +60,8 @@ const messageRunIds = new Set(events
 if (messageRunIds.size !== 1 ||
     !events.some(event => event.kind === 'stream-heartbeat'))
     throw new Error('Stream messages did not retain run and sequence correlation');
+if (!events.some(event => event.kind === 'stdout-bytes' && event.bytes > 0))
+    throw new Error('Stream did not report live bounded stdout byte counts');
 if (!phases.some(phase => phase[0] === 'first-byte' &&
     phase[2] === 'fixture-messages'))
     throw new Error('Stream omitted time-to-first-byte measurement');

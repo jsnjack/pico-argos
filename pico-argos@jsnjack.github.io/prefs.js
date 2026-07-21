@@ -222,7 +222,8 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
 function healthSubtitle(plugin) {
     const success = plugin.lastSuccessUs === null
         ? 'never updated'
-        : `last success ${formatDurationUs(plugin.lastSuccessUs)} monotonic`;
+        : `last success ${formatDurationUs(
+            Math.max(0, GLib.get_monotonic_time() - plugin.lastSuccessUs))} ago`;
     const failure = plugin.lastFailure === null
         ? 'no failure'
         : `failure ${plugin.lastFailure.kind}`;

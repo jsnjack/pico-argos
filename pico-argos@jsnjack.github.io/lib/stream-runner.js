@@ -120,6 +120,13 @@ export class StreamRunner {
             cancellable,
             chunk => {
                 context.stdoutBytes += chunk.length;
+                this._emit(
+                    'stdout-bytes',
+                    manifest.id,
+                    runId,
+                    this._clock.nowUs(),
+                    context.messageSequence,
+                    {bytes: chunk.length});
                 if (context.firstStdoutUs === null) {
                     context.firstStdoutUs = this._clock.nowUs();
                     this._onPhase?.(
@@ -193,6 +200,13 @@ export class StreamRunner {
             cancellable,
             chunk => {
                 context.stderrBytes += chunk.length;
+                this._emit(
+                    'stderr-bytes',
+                    manifest.id,
+                    runId,
+                    this._clock.nowUs(),
+                    context.messageSequence,
+                    {bytes: chunk.length});
                 context.stderr.push(chunk, this._clock.nowUs());
             },
             () => this._emit(

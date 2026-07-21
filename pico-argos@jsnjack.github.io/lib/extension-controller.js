@@ -176,6 +176,8 @@ export class ExtensionController {
                 event.cycleId ?? event.runId ?? event.error?.details?.runId ?? 0,
                 event.sequence ?? 0);
         }
+        if (event.kind === 'spawn-return' && event.spawned === false)
+            this._diagnostics.recordSpawnFailure();
         if (event.runtime === 'stream' && event.kind === 'failure') {
             this._diagnostics.recordTraceEvent(
                 TRACE_EVENTS.STREAM_RESTART_SCHEDULED,

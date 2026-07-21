@@ -235,7 +235,6 @@ export class RuntimeManager {
             return {kind: 'heartbeat'};
         const health = this._health.get(plugin.id);
         health.messages++;
-        health.stdoutBytes += new TextEncoder().encode(raw).length + 1;
         const startedUs = this._clock.nowUs();
         let processed;
         const observe = this._stateObserver(plugin, context, startedUs);
@@ -350,6 +349,14 @@ export class RuntimeManager {
                 health.niceApplied = event.niceApplied;
         } else if (event.kind === 'process-exit') {
             this._currentChildren = Math.max(0, this._currentChildren - 1);
+        } else if (event.kind === 'stdout-bytes') {
+            const health = this._health.get(event.pluginId);
+            if (health !== undefined)
+                health.stdoutBytes += event.bytes;
+        } else if (event.kind === 'stderr-bytes') {
+            const health = this._health.get(event.pluginId);
+            if (health !== undefined)
+                health.stderrBytes += event.bytes;
         }
         this._onEvent?.({runtime: 'runner', ...event});
     }
@@ -368,7 +375,7 @@ export class RuntimeManager {
                 health.processState = event.restartDelayMs === null ? 'locked' : 'backoff';
                 health.restarts++;
                 health.currentBackoffMs = event.restartDelayMs;
-                this._recordRunDetails(health, event.error.details, false);
+                this._recordRunDetails(health, event.error.details, false, false);
                 this._applyFailure(this._plugins.get(event.pluginId), event.error);
             } else if (event.kind === 'locked') {
                 health.processState = 'locked';
@@ -403,12 +410,14 @@ export class RuntimeManager {
             this._plugins.get(plugin.id) === plugin;
     }
 
-    _recordRunDetails(health, details, includeStdout = true) {
+    _recordRunDetails(
+        health, details, includeStdout = true, includeStderr = true) {
         if (details === null || details === undefined)
             return;
         if (includeStdout)
             health.stdoutBytes += details.stdoutBytes ?? 0;
-        health.stderrBytes += details.stderrBytes ?? 0;
+        if (includeStderr)
+            health.stderrBytes += details.stderrBytes ?? 0;
         if (Number.isFinite(details.launchBeginUs) &&
             Number.isFinite(details.processExitUs)) {
             health.lastChildRuntimeUs = details.processExitUs - details.launchBeginUs;
