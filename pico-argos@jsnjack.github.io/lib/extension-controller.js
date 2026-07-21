@@ -4,6 +4,10 @@ import Gio from 'gi://Gio';
 
 import {MonotonicClock} from './clock.js';
 import {Diagnostics} from './diagnostics.js';
+import {
+    isPluginEnabled,
+    normalizeDisabledPluginIds,
+} from './plugin-enable.js';
 import {PluginRegistry} from './plugin-registry.js';
 import {ProductionRenderer} from './plugin-indicator.js';
 import {ProductionDiagnostics} from './production-diagnostics.js';
@@ -26,6 +30,7 @@ export class ExtensionController {
         this._generation = 0;
         this._plugins = new Map();
         this._registryErrors = [];
+        this._settingsSignalId = 0;
     }
 
     enable() {
@@ -56,7 +61,8 @@ export class ExtensionController {
             diagnostics: this._diagnostics,
             stageTrace: this._stageTrace,
             getRuntimeSnapshot: () => this._runtime?.snapshot() ?? {},
-            getPlugins: () => [...this._plugins.values()],
+            getPlugins: () => [...this._plugins.values()].filter(plugin =>
+                isPluginEnabled(this._disabledPluginIds, plugin.id)),
             getRegistryErrors: () => [...this._registryErrors],
         });
         this._coordinator = new RenderCoordinator({
@@ -93,9 +99,14 @@ export class ExtensionController {
             nextCycleId: () => this._diagnostics.nextCycleId(),
         });
         this._registry = new PluginRegistry();
+        this._disabledPluginIds = normalizeDisabledPluginIds(
+            this._settings.get_strv('disabled-plugins'));
 
         this._productionDiagnostics.enable();
         this._runtime.start();
+        this._settingsSignalId = this._settings.connect(
+            'changed::disabled-plugins',
+            () => this._syncEnabledPlugins());
         this._registry.start(event => {
             if (this._enabled && generation === this._generation)
                 this._onRegistryEvent(event);
@@ -113,6 +124,10 @@ export class ExtensionController {
             return;
         this._enabled = false;
         this._generation++;
+        if (this._settingsSignalId !== 0) {
+            this._settings.disconnect(this._settingsSignalId);
+            this._settingsSignalId = 0;
+        }
         this._registry?.cancel();
         this._runtime?.destroy();
         this._coordinator?.stop();
@@ -122,6 +137,7 @@ export class ExtensionController {
 
         this._plugins.clear();
         this._registryErrors.length = 0;
+        this._disabledPluginIds = [];
         this._registry = null;
         this._runtime = null;
         this._coordinator = null;
@@ -153,7 +169,24 @@ export class ExtensionController {
 
     _setPlugin(plugin) {
         this._plugins.set(plugin.id, plugin);
-        this._runtime.setPlugin(plugin);
+        if (isPluginEnabled(this._disabledPluginIds, plugin.id))
+            this._runtime.setPlugin(plugin);
+        else
+            this._runtime.removePlugin(plugin.id);
+    }
+
+    _syncEnabledPlugins() {
+        const previous = this._disabledPluginIds;
+        this._disabledPluginIds = normalizeDisabledPluginIds(
+            this._settings.get_strv('disabled-plugins'));
+        for (const plugin of this._plugins.values()) {
+            const wasEnabled = isPluginEnabled(previous, plugin.id);
+            const enabled = isPluginEnabled(this._disabledPluginIds, plugin.id);
+            if (enabled && !wasEnabled)
+                this._runtime.setPlugin(plugin);
+            else if (!enabled && wasEnabled)
+                this._runtime.removePlugin(plugin.id);
+        }
     }
 
     _recordRuntimeEvent(event) {

@@ -13,6 +13,13 @@ import {
     DIAGNOSTIC_OBJECT_PATH,
 } from './lib/diagnostic-service.js';
 import {DURATION_BUCKETS_US} from './lib/diagnostics.js';
+import {compareManifests} from './lib/manifest.js';
+import {
+    isPluginEnabled,
+    normalizeDisabledPluginIds,
+    setPluginEnabled,
+} from './lib/plugin-enable.js';
+import {PluginRegistry} from './lib/plugin-registry.js';
 
 const REFRESH_SECONDS = 2;
 
@@ -27,6 +34,12 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
         this._requestPending = false;
         this._traceState = 'unavailable';
         this._lastExportPath = null;
+        this._plugins = new Map();
+        this._pluginRows = [];
+        this._updatingPluginSwitches = false;
+        this._settingsSignalId = this._settings.connect(
+            'changed::disabled-plugins',
+            () => this._syncPluginSwitches());
 
         window.add(this._buildGeneralPage());
         this._diagnosticsPage = this._buildDiagnosticsPage();
@@ -39,6 +52,7 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
             return false;
         });
         this._updateRefreshState();
+        this._startPluginRegistry();
     }
 
     _buildGeneralPage() {
@@ -46,6 +60,14 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
             title: 'General',
             icon_name: 'preferences-system-symbolic',
         });
+        this._pluginGroup = new Adw.PreferencesGroup({title: 'Plugins'});
+        this._pluginStatus = new Adw.ActionRow({
+            title: 'Discovering plugins',
+            subtitle: 'Plugin switches stop children and remove their panel UI immediately.',
+        });
+        this._pluginGroup.add(this._pluginStatus);
+        page.add(this._pluginGroup);
+
         const group = new Adw.PreferencesGroup({title: 'Diagnostics overhead'});
         const modes = Gtk.StringList.new(['Summary', 'Off']);
         const row = new Adw.ComboRow({
@@ -60,6 +82,92 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
         group.add(row);
         page.add(group);
         return page;
+    }
+
+    _startPluginRegistry() {
+        this._preferenceRegistry = new PluginRegistry();
+        this._preferenceRegistry.start(event => {
+            if (this._window === null)
+                return;
+            if (event.kind === 'initial') {
+                this._plugins = new Map(event.plugins.map(plugin =>
+                    [plugin.id, plugin]));
+                this._renderPluginRows(event.errors.length);
+            } else if (event.kind === 'added' || event.kind === 'replaced') {
+                this._plugins.set(event.plugin.id, event.plugin);
+                this._renderPluginRows();
+            } else if (event.kind === 'removed') {
+                this._plugins.delete(event.id);
+                this._renderPluginRows();
+            } else if (event.kind === 'error') {
+                this._pluginStatus.title = `Plugin ${event.id} is invalid`;
+                this._pluginStatus.subtitle = event.message;
+            }
+        }).catch(error => {
+            if (this._window === null ||
+                error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                return;
+            this._pluginStatus.title = 'Plugin discovery failed';
+            this._pluginStatus.subtitle = error.message;
+        });
+    }
+
+    _renderPluginRows(errorCount = 0) {
+        const disabled = normalizeDisabledPluginIds(
+            this._settings.get_strv('disabled-plugins'));
+        const plugins = [...this._plugins.values()].sort((left, right) =>
+            compareManifests(left.manifest, right.manifest));
+        const rows = plugins.map(plugin => {
+            const enabled = isPluginEnabled(disabled, plugin.id);
+            const toggle = new Gtk.Switch({
+                active: enabled,
+                valign: Gtk.Align.CENTER,
+            });
+            toggle.connect('notify::active', () => {
+                if (!this._updatingPluginSwitches)
+                    this._setPluginEnabled(plugin.id, toggle.active);
+            });
+            const row = new Adw.ActionRow({
+                title: plugin.id,
+                subtitle: `${plugin.manifest.mode} · ${plugin.manifest.position} · ` +
+                    `${enabled ? 'enabled' : 'disabled'}`,
+                activatable_widget: toggle,
+            });
+            row.add_suffix(toggle);
+            row._pluginId = plugin.id;
+            row._toggle = toggle;
+            return row;
+        });
+        this._replaceRows(this._pluginGroup, this._pluginRows, rows);
+        this._pluginRows = rows;
+        this._pluginStatus.title = plugins.length === 0
+            ? 'No valid plugins discovered'
+            : `${plugins.length} plugin${plugins.length === 1 ? '' : 's'} available`;
+        this._pluginStatus.subtitle = errorCount === 0
+            ? 'Changes apply immediately and persist without editing plugin files.'
+            : `${errorCount} plugin${errorCount === 1 ? '' : 's'} could not be loaded.`;
+    }
+
+    _setPluginEnabled(pluginId, enabled) {
+        const next = setPluginEnabled(
+            this._settings.get_strv('disabled-plugins'),
+            pluginId,
+            enabled);
+        this._settings.set_strv('disabled-plugins', next);
+    }
+
+    _syncPluginSwitches() {
+        const disabled = normalizeDisabledPluginIds(
+            this._settings.get_strv('disabled-plugins'));
+        this._updatingPluginSwitches = true;
+        for (const row of this._pluginRows) {
+            const enabled = isPluginEnabled(disabled, row._pluginId);
+            row._toggle.active = enabled;
+            const plugin = this._plugins.get(row._pluginId);
+            row.subtitle = `${plugin.manifest.mode} · ${plugin.manifest.position} · ` +
+                `${enabled ? 'enabled' : 'disabled'}`;
+        }
+        this._updatingPluginSwitches = false;
     }
 
     _buildDiagnosticsPage() {
@@ -273,6 +381,12 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
     }
 
     _destroy() {
+        this._preferenceRegistry?.cancel();
+        this._preferenceRegistry = null;
+        if (this._settingsSignalId !== 0) {
+            this._settings.disconnect(this._settingsSignalId);
+            this._settingsSignalId = 0;
+        }
         if (this._refreshSourceId !== 0) {
             GLib.source_remove(this._refreshSourceId);
             this._refreshSourceId = 0;
@@ -286,6 +400,8 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
             this._closeSignalId = 0;
         }
         this._settings = null;
+        this._plugins.clear();
+        this._pluginRows = [];
         this._window = null;
     }
 }

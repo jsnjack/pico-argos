@@ -64,12 +64,14 @@ counters, restart/backoff state, output rejections, UI queue/apply phases, and
 mutation-armed stage events are correlated without exporting plugin output or
 environment values.
 
-The preferences window exposes the persistent diagnostics mode, on-demand
-plugin health, bounded phase percentiles, actor mutation totals, and trace
-record/stop/export/reset controls. It polls the live summary only while the
-Diagnostics page is visible.
+The preferences window discovers every valid plugin and provides a persistent
+enable switch that immediately stops its child and removes its panel UI without
+rewriting the plugin manifest. It also exposes the persistent diagnostics mode,
+on-demand plugin health, bounded phase percentiles, actor mutation totals, and
+trace record/stop/export/reset controls. It polls the live summary only while
+the Diagnostics page is visible.
 
-CPU, memory, disk, and network behavior is provided by the optional
+CPU, GPU, memory, disk, and network behavior is provided by the optional
 `plugins/system-monitor` stream plugin, not the extension core. It samples
 retained Linux counter sources from one persistent GJS process, uses actual
 monotonic elapsed time, and emits one fixed-width combined indicator. GitHub,

@@ -11,5 +11,10 @@
       <summary>Diagnostics mode</summary>
       <description>Collect bounded summary diagnostics or errors only.</description>
     </key>
+    <key name="disabled-plugins" type="as">
+      <default>[]</default>
+      <summary>Disabled plugin identifiers</summary>
+      <description>Validated discovered plugins that must not be started or rendered.</description>
+    </key>
   </schema>
 </schemalist>

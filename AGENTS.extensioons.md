@@ -70,6 +70,13 @@ Prefer atomic temporary-file replacement for manifests and executables. The
 registry debounces changes and retains the last valid definition while a new
 manifest is incomplete or invalid.
 
+Users enable and disable discovered plugins from the extension's General
+preferences page. That switch updates the core-owned `disabled-plugins`
+GSettings key, immediately stops or starts the direct child, and removes or
+restores its panel UI. Extension authors and agents must not add an `enabled`
+manifest field, rename plugin files to toggle them, or rewrite a plugin's
+domain configuration. Unknown manifest fields remain a protocol error.
+
 Environment variables are opt-in through `passEnvironment`. Variables added to
 a terminal after GNOME Shell starts are not retroactively visible to the Shell.
 For reference GitHub plugins, place the required values in the session startup
