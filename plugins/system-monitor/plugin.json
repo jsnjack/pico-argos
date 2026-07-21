@@ -10,7 +10,7 @@
   "position": "right",
   "order": 0,
   "nice": 10,
-  "reserveTextChars": 51,
+  "reserveTextChars": 60,
   "passEnvironment": [],
   "failurePolicy": "show-error",
   "maxStaleMs": 10000

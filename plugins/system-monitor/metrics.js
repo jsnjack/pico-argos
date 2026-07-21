@@ -23,6 +23,14 @@ export function cpuUsage(previous, current) {
     return clamp(100 * (total - idle) / total, 0, 100);
 }
 
+/** Parses a Linux DRM gpu_busy_percent utilization sample. */
+export function parseGpuUsage(text) {
+    const value = Number(text.trim());
+    if (!Number.isFinite(value) || value < 0 || value > 100)
+        throw new Error('DRM GPU utilization is malformed');
+    return value;
+}
+
 /** Computes used memory percentage from required MemTotal/MemAvailable fields. */
 export function parseMemoryUsage(text) {
     const fields = new Map();
@@ -79,17 +87,19 @@ export function networkRates(previous, current, elapsedMs, fastIntervalMs) {
     return {receive: receive / seconds, transmit: transmit / seconds};
 }
 
-const ALL_FIELDS = Object.freeze(['cpu', 'memory', 'disk', 'network']);
+const ALL_FIELDS = Object.freeze(['cpu', 'gpu', 'memory', 'disk', 'network']);
 
 /** Formats one constant-width combined system label for selected fields. */
 export function formatSystemLabel(
-    {cpu, memory, disk, receive, transmit}, fields = ALL_FIELDS,
+    {cpu, gpu, memory, disk, receive, transmit}, fields = ALL_FIELDS,
     presentation = 'legacy') {
     const selected = new Set(fields);
     if (presentation === 'compact') {
         const parts = [];
         if (selected.has('cpu'))
             parts.push(`CPU ${formatPercent(cpu)}%`);
+        if (selected.has('gpu'))
+            parts.push(`GPU ${formatPercent(gpu)}%`);
         if (selected.has('memory'))
             parts.push(`MEM ${formatPercent(memory)}%`);
         if (selected.has('disk'))
@@ -103,6 +113,8 @@ export function formatSystemLabel(
     const parts = [];
     if (selected.has('cpu'))
         parts.push(`cpu ${formatPercent(cpu)}%`);
+    if (selected.has('gpu'))
+        parts.push(`gpu ${formatPercent(gpu)}%`);
     if (selected.has('memory'))
         parts.push(`mem ${formatPercent(memory)}%`);
     if (selected.has('disk'))
@@ -120,6 +132,8 @@ export function systemSnapshot(metrics, fields = ALL_FIELDS, options = {}) {
     const menu = [];
     if (selected.has('cpu'))
         menu.push(detail('cpu', 'CPU utilization', formatDetail(metrics.cpu)));
+    if (selected.has('gpu'))
+        menu.push(detail('gpu', 'GPU utilization', formatDetail(metrics.gpu)));
     if (selected.has('memory'))
         menu.push(detail('memory', 'Memory utilization', formatDetail(metrics.memory)));
     if (selected.has('disk'))
@@ -129,6 +143,8 @@ export function systemSnapshot(metrics, fields = ALL_FIELDS, options = {}) {
         menu.push(detail('network-transmit', 'Network transmit', formatDetailRate(metrics.transmit)));
     }
     const sources = [];
+    if (selected.has('gpu') && options.gpuDevice)
+        sources.push(`GPU device: ${options.gpuDevice}`);
     if (selected.has('disk') && options.diskDevice)
         sources.push(`Block device: ${options.diskDevice}`);
     if (selected.has('network') && options.networkInterface)

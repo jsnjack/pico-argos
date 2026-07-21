@@ -1,8 +1,8 @@
 # system-monitor reference plugin
 
 This persistent GJS plugin samples aggregate CPU and memory counters from
-`/proc`, direct-device activity from `/sys`, and primary-interface byte counters
-from `/proc/net/dev`. It starts no recurring child processes.
+`/proc`, GPU and direct-device activity from `/sys`, and primary-interface byte
+counters from `/proc/net/dev`. It starts no recurring child processes.
 
 Copy this directory to
 `$XDG_CONFIG_HOME/pico-argos/plugins/system-monitor/`. Optionally copy
@@ -10,10 +10,16 @@ Copy this directory to
 sampling intervals, or select an explicit block device or network interface
 where automatic resolution is ambiguous.
 
-The combined label keeps the legacy `cpu`, `mem`, and `io` tokens plus the
-down/up arrows, two-decimal `KBs`/`MBs` rates, and 9-pixel monospace styling.
-Putting the four readings in one persistent indicator removes recurring child
-processes without making the panel presentation unfamiliar.
+The combined label keeps the legacy `cpu`, matching `gpu`, `mem`, and `io`
+tokens plus the down/up arrows, two-decimal `KBs`/`MBs` rates, and 9-pixel
+monospace styling. Putting the readings in one persistent indicator removes
+recurring child processes without making the panel presentation unfamiliar.
+
+GPU usage comes from the kernel DRM device's `gpu_busy_percent` counter. Auto
+selection prefers the boot display adapter and otherwise uses the first
+readable DRM card. Set `gpuDevice` to an explicit `cardN` when needed. Systems
+without that kernel counter retain the fixed-width `gpu  --%` placeholder
+instead of spawning a vendor utility.
 
 `presentation` defaults to `legacy`. Set it to `compact` for the cleaner
 uppercase, abbreviated-rate layout; both layouts remain fixed-width. Optional

@@ -11,6 +11,7 @@ import {
     networkRates,
     parseCpuStat,
     parseDiskIoMs,
+    parseGpuUsage,
     parseMemoryUsage,
     parseNetworkCounters,
     systemSnapshot,
@@ -70,10 +71,16 @@ const timingTrace = config.diagnosticTracePath === null
 const selectedFields = new Set(config.fields);
 const readers = {
     cpu: new StableReader('/proc/stat'),
+    gpu: null,
     memory: new StableReader('/proc/meminfo'),
     network: new StableReader('/proc/net/dev'),
     disk: null,
 };
+let gpuDevice = selectedFields.has('gpu')
+    ? resolveGpuDevice(config.gpuDevice)
+    : null;
+if (selectedFields.has('gpu') && gpuDevice !== null)
+    readers.gpu = new StableReader(`/sys/class/drm/${gpuDevice}/device/gpu_busy_percent`);
 let networkInterface = selectedFields.has('network')
     ? resolveNetworkInterface(config.networkInterface)
     : null;
@@ -99,6 +106,9 @@ let diskBaseline = safely(() => !selectedFields.has('disk') || readers.disk === 
 let diskBaselineUs = startedUs;
 const metrics = {
     cpu: null,
+    gpu: safely(() => selectedFields.has('gpu') && readers.gpu !== null
+        ? parseGpuUsage(readers.gpu.read(startupBudget))
+        : null),
     memory: safely(() => selectedFields.has('memory')
         ? parseMemoryUsage(readers.memory.read(startupBudget))
         : null),
@@ -106,7 +116,8 @@ const metrics = {
     receive: 0,
     transmit: 0,
 };
-let nextFastUs = selectedFields.has('cpu') || selectedFields.has('network')
+let nextFastUs = selectedFields.has('cpu') || selectedFields.has('gpu') ||
+    selectedFields.has('network')
     ? startedUs + config.fastIntervalMs * 1_000
     : Number.POSITIVE_INFINITY;
 let nextDiskUs = selectedFields.has('disk')
@@ -185,6 +196,7 @@ function sample() {
         const snapshot = JSON.stringify(systemSnapshot(metrics, config.fields, {
             presentation: config.presentation,
             thresholds: config.thresholds,
+            gpuDevice,
             diskDevice,
             networkInterface,
         }));
@@ -228,6 +240,12 @@ function sampleFast(nowUs, budget) {
         cpuBaseline = currentCpu;
     }
 
+    const currentGpu = safely(() => selectedFields.has('gpu') && readers.gpu !== null
+        ? parseGpuUsage(readers.gpu.read(budget))
+        : null);
+    if (currentGpu !== null)
+        metrics.gpu = currentGpu;
+
     const currentNetwork = safely(() => !selectedFields.has('network') ||
         networkInterface === null
         ? null
@@ -264,6 +282,28 @@ function sampleDisk(nowUs, budget) {
 }
 
 function monitorResolutionChanges() {
+    if (selectedFields.has('gpu') && config.gpuDevice === 'auto') {
+        try {
+            const monitor = Gio.File.new_for_path('/sys/class/drm').monitor_directory(
+                Gio.FileMonitorFlags.NONE,
+                null);
+            monitors.push(monitor);
+            monitor.connect('changed', () => {
+                const resolved = resolveGpuDevice('auto');
+                if (resolved === gpuDevice)
+                    return;
+                readers.gpu?.close();
+                gpuDevice = resolved;
+                readers.gpu = resolved === null
+                    ? null
+                    : new StableReader(
+                        `/sys/class/drm/${resolved}/device/gpu_busy_percent`);
+                metrics.gpu = null;
+            });
+        } catch (_error) {
+            // The startup DRM selection remains stable until process restart.
+        }
+    }
     if (selectedFields.has('network') && config.networkInterface === 'auto') {
         try {
             Gio.DBus.system.signal_subscribe(
@@ -315,7 +355,8 @@ function loadConfig() {
         fastIntervalMs: 250,
         diskIntervalMs: 500,
         memoryIntervalMs: 1_000,
-        fields: ['cpu', 'memory', 'disk', 'network'],
+        fields: ['cpu', 'gpu', 'memory', 'disk', 'network'],
+        gpuDevice: 'auto',
         diskDevice: 'auto',
         networkInterface: 'auto',
         presentation: 'legacy',
@@ -336,6 +377,7 @@ function loadConfig() {
         'diskIntervalMs',
         'memoryIntervalMs',
         'fields',
+        'gpuDevice',
         'diskDevice',
         'networkInterface',
         'presentation',
@@ -350,10 +392,13 @@ function loadConfig() {
     requireRange(result.diskIntervalMs, 100, 10_000, 'diskIntervalMs');
     requireRange(result.memoryIntervalMs, 100, 10_000, 'memoryIntervalMs');
     if (!Array.isArray(result.fields) || result.fields.length === 0 ||
-        result.fields.length > 4 || new Set(result.fields).size !== result.fields.length ||
-        result.fields.some(field => !['cpu', 'memory', 'disk', 'network'].includes(field))) {
-        throw new Error('fields must contain unique CPU, memory, disk, or network names');
+        result.fields.length > 5 || new Set(result.fields).size !== result.fields.length ||
+        result.fields.some(field => !['cpu', 'gpu', 'memory', 'disk', 'network'].includes(field))) {
+        throw new Error('fields must contain unique CPU, GPU, memory, disk, or network names');
     }
+    if (typeof result.gpuDevice !== 'string' ||
+        !/^(auto|card[0-9]{1,3})$/.test(result.gpuDevice))
+        throw new Error('Invalid gpuDevice');
     for (const field of ['diskDevice', 'networkInterface']) {
         if (typeof result[field] !== 'string' || !/^(auto|[A-Za-z0-9_.:-]+)$/.test(result[field]))
             throw new Error(`Invalid ${field}`);
@@ -374,7 +419,7 @@ function validateThresholds(value) {
         throw new Error('thresholds must be an object');
     const result = {};
     for (const [field, threshold] of Object.entries(value)) {
-        if (!['cpu', 'memory', 'disk'].includes(field) || threshold === null ||
+        if (!['cpu', 'gpu', 'memory', 'disk'].includes(field) || threshold === null ||
             typeof threshold !== 'object' || Array.isArray(threshold) ||
             Object.keys(threshold).some(key => !['warning', 'critical'].includes(key))) {
             throw new Error(`Invalid threshold field: ${field}`);
@@ -399,6 +444,49 @@ function resolveNetworkInterface(configured) {
     if (configured !== 'auto')
         return configured;
     return resolveNetworkManagerInterface() ?? resolveRouteInterface();
+}
+
+function resolveGpuDevice(configured) {
+    if (configured !== 'auto')
+        return configured;
+    let enumerator;
+    try {
+        enumerator = Gio.File.new_for_path('/sys/class/drm').enumerate_children(
+            Gio.FILE_ATTRIBUTE_STANDARD_NAME,
+            Gio.FileQueryInfoFlags.NONE,
+            null);
+        const candidates = [];
+        for (let count = 0; count < 64; count++) {
+            const info = enumerator.next_file(null);
+            if (info === null)
+                break;
+            const name = info.get_name();
+            if (/^card[0-9]{1,3}$/.test(name))
+                candidates.push(name);
+        }
+        candidates.sort((left, right) => Number(left.slice(4)) - Number(right.slice(4)));
+        let fallback = null;
+        for (const name of candidates.slice(0, 16)) {
+            const busyPath = `/sys/class/drm/${name}/device/gpu_busy_percent`;
+            try {
+                parseGpuUsage(readBoundedFile(busyPath));
+                fallback ??= name;
+                if (readBoundedFile(`/sys/class/drm/${name}/device/boot_vga`).trim() === '1')
+                    return name;
+            } catch (_error) {
+                // Unsupported DRM cards are skipped without a vendor process.
+            }
+        }
+        return fallback;
+    } catch (_error) {
+        return null;
+    } finally {
+        try {
+            enumerator?.close(null);
+        } catch (_error) {
+            // Process teardown also releases the startup-only enumerator.
+        }
+    }
 }
 
 function resolveNetworkManagerInterface() {

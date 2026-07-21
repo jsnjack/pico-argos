@@ -7,6 +7,7 @@ import {
     networkRates,
     parseCpuStat,
     parseDiskIoMs,
+    parseGpuUsage,
     parseMemoryUsage,
     parseNetworkCounters,
     systemSnapshot,
@@ -22,6 +23,16 @@ const currentCpu = parseCpuStat('cpu  130 10 50 850 20 5 5 0 0 0\n');
 near(cpuUsage(previousCpu, currentCpu), 44.444444, 'CPU utilization');
 if (cpuUsage(currentCpu, previousCpu) !== null)
     throw new Error('CPU counter reset was not rejected');
+near(parseGpuUsage('42\n'), 42, 'GPU utilization');
+for (const invalid of ['-1', '101', 'busy']) {
+    try {
+        parseGpuUsage(invalid);
+        throw new Error(`Invalid GPU utilization was accepted: ${invalid}`);
+    } catch (error) {
+        if (error.message.startsWith('Invalid GPU'))
+            throw error;
+    }
+}
 near(parseMemoryUsage('MemTotal:       1000 kB\nMemAvailable:    400 kB\n'), 60, 'memory');
 if (parseDiskIoMs('1 2 3 4 5 6 7 8 9 250 11') !== 250)
     throw new Error('Disk I/O field was parsed incorrectly');
@@ -37,21 +48,28 @@ if (networkRates(currentNetwork, previousNetwork, 250, 250) !== null ||
     networkRates(previousNetwork, currentNetwork, 2_000, 250) !== null)
     throw new Error('Network reset/discontinuity was not rejected');
 
-const metrics = {cpu: 12, memory: 47, disk: 0, receive: 123_400, transmit: 2_100_000};
+const metrics = {
+    cpu: 12,
+    gpu: 34,
+    memory: 47,
+    disk: 0,
+    receive: 123_400,
+    transmit: 2_100_000,
+};
 const label = formatSystemLabel(metrics);
-if (label !== 'cpu  12% mem  47% io   0% ⏷ 123.40 KBs ⏶   2.10 MBs')
+if (label !== 'cpu  12% gpu  34% mem  47% io   0% ⏷ 123.40 KBs ⏶   2.10 MBs')
     throw new Error(`Unexpected fixed-width label: ${JSON.stringify(label)}`);
 for (const values of [
     metrics,
-    {cpu: 100, memory: null, disk: 99.5, receive: 0, transmit: 999_900_000_000},
-    {cpu: 0, memory: 0, disk: 0, receive: 9_999, transmit: 99_999},
+    {cpu: 100, gpu: null, memory: null, disk: 99.5, receive: 0, transmit: 999_900_000_000},
+    {cpu: 0, gpu: 0, memory: 0, disk: 0, receive: 9_999, transmit: 99_999},
 ]) {
     const formatted = formatSystemLabel(values);
-    if ([...formatted].length !== 51)
+    if ([...formatted].length !== 60)
         throw new Error(`System label width changed: ${formatted.length} ${JSON.stringify(formatted)}`);
 }
 const snapshot = systemSnapshot(metrics);
-if ([...snapshot.panel.text].length !== 51 || snapshot.menu.length !== 5)
+if ([...snapshot.panel.text].length !== 60 || snapshot.menu.length !== 6)
     throw new Error('System protocol snapshot is not fixed-width and complete');
 const selected = systemSnapshot(metrics, ['cpu', 'network']);
 if (selected.panel.text !== 'cpu  12% ⏷ 123.40 KBs ⏶   2.10 MBs' ||
@@ -63,16 +81,19 @@ if (!formatSystemLabel({...metrics, receive: 1_500_000_000}).includes('  1.50 GB
 const compact = systemSnapshot(metrics, undefined, {
     presentation: 'compact',
     thresholds: {memory: {warning: 40, critical: 90}},
+    gpuDevice: 'card1',
     diskDevice: 'nvme0n1',
     networkInterface: 'wlp1s0',
 });
 if (compact.panel.text !==
-        'CPU  12%  MEM  47%  IO   0%  ↓123.4K  ↑  2.1M' ||
-    [...compact.panel.text].length !== 45 ||
+        'CPU  12%  GPU  34%  MEM  47%  IO   0%  ↓123.4K  ↑  2.1M' ||
+    [...compact.panel.text].length !== 55 ||
     compact.panel.severity !== 'warning' ||
     compact.menu.find(item => item.id === 'source-0')?.text !==
-        'Block device: nvme0n1' ||
+        'GPU device: card1' ||
     compact.menu.find(item => item.id === 'source-1')?.text !==
+        'Block device: nvme0n1' ||
+    compact.menu.find(item => item.id === 'source-2')?.text !==
         'Network interface: wlp1s0') {
     throw new Error(`Compact system presentation is invalid: ${JSON.stringify(compact)}`);
 }

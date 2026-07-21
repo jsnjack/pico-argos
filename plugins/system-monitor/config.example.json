@@ -2,13 +2,15 @@
   "fastIntervalMs": 250,
   "diskIntervalMs": 500,
   "memoryIntervalMs": 1000,
-  "fields": ["cpu", "memory", "disk", "network"],
+  "fields": ["cpu", "gpu", "memory", "disk", "network"],
+  "gpuDevice": "auto",
   "diskDevice": "auto",
   "networkInterface": "auto",
   "presentation": "legacy",
   "diagnosticTracePath": null,
   "thresholds": {
     "cpu": {"warning": 85, "critical": 95},
+    "gpu": {"warning": 85, "critical": 95},
     "memory": {"warning": 85, "critical": 95},
     "disk": {"warning": 90, "critical": 98}
   }
