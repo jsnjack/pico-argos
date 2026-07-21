@@ -127,6 +127,7 @@ jq -e '
     (.events | map(.[0]) | index(11)) != null and
     (.events | map(.[0]) | index(27)) != null and
     .runtime.children.peak == 1 and
+    .environment.monitors[0].refreshRate == 60 and
     .manifests[0].id == "smoke" and
     (.manifests[0] | has("command") | not)
 ' "$trace_path" >/dev/null

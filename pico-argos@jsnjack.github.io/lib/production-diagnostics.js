@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import System from 'system';
 
@@ -12,6 +13,9 @@ import {TraceExporter} from './trace-exporter.js';
 
 const MAX_SUMMARY_BYTES = 64 * 1_024;
 const MAX_SLOW_PHASE_LOG_KEYS = 256;
+const DISPLAY_CONFIG_BUS_NAME = 'org.gnome.Mutter.DisplayConfig';
+const DISPLAY_CONFIG_OBJECT_PATH = '/org/gnome/Mutter/DisplayConfig';
+const DISPLAY_CONFIG_INTERFACE = 'org.gnome.Mutter.DisplayConfig';
 
 /** Owns production summary, trace controls, stage arming, and sanitized export. */
 export class ProductionDiagnostics {
@@ -40,6 +44,9 @@ export class ProductionDiagnostics {
         this._lastExportPath = null;
         this._lastExportError = null;
         this._slowPhaseLogs = new Map();
+        this._monitorCancellable = new Gio.Cancellable();
+        this._monitorRequestPending = false;
+        this._monitorRefreshRates = new Map();
     }
 
     enable() {
@@ -50,6 +57,7 @@ export class ProductionDiagnostics {
             resetSummary: () => this._diagnostics.reset(),
         });
         this._service.enable();
+        this._refreshMonitorConfiguration();
         this._settingsSignalId = this._settings.connect(
             'changed::diagnostics-mode',
             () => this._diagnostics.setMode(
@@ -100,6 +108,7 @@ export class ProductionDiagnostics {
             return null;
         const traceId = this._diagnostics.startTrace(this._timing());
         this._lastExportError = null;
+        this._refreshMonitorConfiguration();
         this._traceTimerId = GLib.timeout_add_seconds(
             GLib.PRIORITY_DEFAULT,
             durationSeconds,
@@ -153,6 +162,8 @@ export class ProductionDiagnostics {
             this._diagnostics.stopTrace(this._timing());
         this._traceExporter?.cancel();
         this._traceExporter = null;
+        this._monitorCancellable.cancel();
+        this._monitorRefreshRates.clear();
         this._slowPhaseLogs.clear();
         this._settings = null;
     }
@@ -205,7 +216,9 @@ export class ProductionDiagnostics {
                     y: monitor.y,
                     width: monitor.width,
                     height: monitor.height,
-                    refreshRate: monitor.refreshRate ?? monitor.refresh_rate ?? null,
+                    refreshRate: this._monitorRefreshRates.get(
+                        monitorPositionKey(monitor.x, monitor.y)) ??
+                        monitor.refreshRate ?? monitor.refresh_rate ?? null,
                 })),
             },
             manifests: this._getPlugins().map(sanitizePlugin),
@@ -239,6 +252,65 @@ export class ProductionDiagnostics {
             lastExportError: this._lastExportError,
         };
     }
+
+    _refreshMonitorConfiguration() {
+        if (this._monitorRequestPending || this._monitorCancellable.is_cancelled())
+            return;
+        this._monitorRequestPending = true;
+        Gio.DBus.session.call(
+            DISPLAY_CONFIG_BUS_NAME,
+            DISPLAY_CONFIG_OBJECT_PATH,
+            DISPLAY_CONFIG_INTERFACE,
+            'GetCurrentState',
+            null,
+            null,
+            Gio.DBusCallFlags.NONE,
+            1_000,
+            this._monitorCancellable,
+            (connection, result) => {
+                this._monitorRequestPending = false;
+                let reply;
+                try {
+                    reply = connection.call_finish(result).deepUnpack();
+                } catch (_error) {
+                    return;
+                }
+                this._monitorRefreshRates = monitorRefreshRates(reply);
+            });
+    }
+}
+
+function monitorRefreshRates(reply) {
+    const physicalRates = new Map();
+    for (const [specification, modes] of reply[1] ?? []) {
+        const currentMode = modes.find(mode =>
+            unpackVariant(mode[6]?.['is-current']) === true);
+        const refreshRate = currentMode?.[3];
+        if (Number.isFinite(refreshRate))
+            physicalRates.set(specification[0], refreshRate);
+    }
+
+    const logicalRates = new Map();
+    for (const logicalMonitor of reply[2] ?? []) {
+        const connectors = logicalMonitor[5].map(specification => specification[0]);
+        const rates = connectors
+            .map(connector => physicalRates.get(connector))
+            .filter(rate => rate !== undefined);
+        if (rates.length > 0) {
+            logicalRates.set(
+                monitorPositionKey(logicalMonitor[0], logicalMonitor[1]),
+                Math.max(...rates));
+        }
+    }
+    return logicalRates;
+}
+
+function unpackVariant(value) {
+    return typeof value?.deepUnpack === 'function' ? value.deepUnpack() : value;
+}
+
+function monitorPositionKey(x, y) {
+    return `${x}:${y}`;
 }
 
 function sanitizePlugin(plugin) {
