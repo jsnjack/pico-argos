@@ -8,8 +8,10 @@ export class TraceEncoder {
     constructor(document, trace) {
         this._trace = trace;
         this._eventIndex = 0;
-        this._entries = Object.entries(document);
-        this._entryIndex = 0;
+        this._hasDocumentEntries = Object.keys(document).length !== 0;
+        this._documentIterator = encodeEntries(document);
+        this._documentComplete = false;
+        this._pendingDocumentToken = '';
         this._documentStartPending = true;
         this._eventsStartPending = true;
         this._suffixPending = true;
@@ -23,15 +25,34 @@ export class TraceEncoder {
             return '{';
         }
 
-        if (this._entryIndex < this._entries.length) {
-            const [key, value] = this._entries[this._entryIndex++];
-            const separator = this._entryIndex === 1 ? '' : ',';
-            return `${separator}${JSON.stringify(key)}:${JSON.stringify(value)}`;
+        if (!this._documentComplete) {
+            const startedUs = clock.nowUs();
+            const parts = [];
+            let chunkLength = 0;
+            while (chunkLength < maximumChunkChars) {
+                if (this._pendingDocumentToken.length === 0) {
+                    const next = this._documentIterator.next();
+                    if (next.done) {
+                        this._documentComplete = true;
+                        break;
+                    }
+                    this._pendingDocumentToken = next.value;
+                }
+                const remaining = maximumChunkChars - chunkLength;
+                const part = this._pendingDocumentToken.slice(0, remaining);
+                parts.push(part);
+                chunkLength += part.length;
+                this._pendingDocumentToken = this._pendingDocumentToken.slice(part.length);
+                if (clock.nowUs() - startedUs >= sliceBudgetUs)
+                    break;
+            }
+            if (parts.length > 0)
+                return parts.join('');
         }
 
         if (this._eventsStartPending) {
             this._eventsStartPending = false;
-            return `${this._entries.length === 0 ? '' : ','}"events":[`;
+            return `${this._hasDocumentEntries ? ',' : ''}"events":[`;
         }
 
         if (this._eventIndex < this._trace.length) {
@@ -61,4 +82,39 @@ export class TraceEncoder {
         }
         return null;
     }
+}
+
+function* encodeEntries(document) {
+    let first = true;
+    for (const [key, value] of Object.entries(document)) {
+        yield `${first ? '' : ','}${JSON.stringify(key)}:`;
+        yield* encodeValue(value);
+        first = false;
+    }
+}
+
+function* encodeValue(value) {
+    if (value === null || typeof value !== 'object') {
+        yield JSON.stringify(value);
+        return;
+    }
+    if (Array.isArray(value)) {
+        yield '[';
+        for (let index = 0; index < value.length; index++) {
+            if (index !== 0)
+                yield ',';
+            yield* encodeValue(value[index]);
+        }
+        yield ']';
+        return;
+    }
+
+    yield '{';
+    let first = true;
+    for (const [key, child] of Object.entries(value)) {
+        yield `${first ? '' : ','}${JSON.stringify(key)}:`;
+        yield* encodeValue(child);
+        first = false;
+    }
+    yield '}';
 }

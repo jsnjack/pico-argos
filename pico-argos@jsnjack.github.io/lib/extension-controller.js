@@ -13,6 +13,8 @@ import {StageTrace} from './stage-trace.js';
 import {TRACE_EVENTS, tracePluginId} from './trace.js';
 
 const MAX_REGISTRY_ERRORS = 32;
+const MAX_REGISTRY_ERROR_ID_CHARS = 64;
+const MAX_REGISTRY_ERROR_MESSAGE_CHARS = 512;
 
 /** Wires and deterministically tears down the production extension modules. */
 export class ExtensionController {
@@ -205,8 +207,12 @@ export class ExtensionController {
     }
 
     _recordRegistryError(id, message) {
+        const boundedId = String(id).slice(0, MAX_REGISTRY_ERROR_ID_CHARS);
+        const boundedMessage = String(message).slice(
+            0,
+            MAX_REGISTRY_ERROR_MESSAGE_CHARS);
         const existing = this._registryErrors.find(error =>
-            error.id === id && error.message === message);
+            error.id === boundedId && error.message === boundedMessage);
         if (existing !== undefined) {
             existing.count++;
             existing.lastMonotonicUs = this._clock.nowUs();
@@ -215,8 +221,8 @@ export class ExtensionController {
         if (this._registryErrors.length === MAX_REGISTRY_ERRORS)
             this._registryErrors.shift();
         this._registryErrors.push({
-            id,
-            message,
+            id: boundedId,
+            message: boundedMessage,
             count: 1,
             lastMonotonicUs: this._clock.nowUs(),
         });

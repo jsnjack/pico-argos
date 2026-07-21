@@ -11,6 +11,7 @@ import {TRACE_EVENTS, tracePluginId} from './trace.js';
 import {TraceExporter} from './trace-exporter.js';
 
 const MAX_SUMMARY_BYTES = 64 * 1_024;
+const MAX_SLOW_PHASE_LOG_KEYS = 256;
 
 /** Owns production summary, trace controls, stage arming, and sanitized export. */
 export class ProductionDiagnostics {
@@ -84,6 +85,10 @@ export class ProductionDiagnostics {
         const lastUs = this._slowPhaseLogs.get(key);
         if (lastUs !== undefined && nowUs - lastUs < 60_000_000)
             return;
+        if (lastUs !== undefined)
+            this._slowPhaseLogs.delete(key);
+        else if (this._slowPhaseLogs.size === MAX_SLOW_PHASE_LOG_KEYS)
+            this._slowPhaseLogs.delete(this._slowPhaseLogs.keys().next().value);
         this._slowPhaseLogs.set(key, nowUs);
         console.warn(
             `[pico-argos] Slow ${name} phase for ${pluginId ?? 'global'}: ` +

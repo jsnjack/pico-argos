@@ -33,4 +33,23 @@ if (document.traceId !== 7)
 if (JSON.stringify(document.events) !== JSON.stringify(trace.events()))
     throw new Error('Incremental trace events changed during encoding');
 
+const boundedEncoder = new TraceEncoder({
+    nested: Array.from({length: 128}, (_value, index) => ({
+        id: index,
+        text: 'x'.repeat(512),
+    })),
+}, trace);
+const boundedChunks = [];
+for (;;) {
+    const chunk = boundedEncoder.nextChunk(clock, 500, 1_024);
+    if (chunk === null)
+        break;
+    if (chunk.length > 1_024)
+        throw new Error(`Trace document chunk exceeded its bound: ${chunk.length}`);
+    boundedChunks.push(chunk);
+}
+const boundedDocument = JSON.parse(boundedChunks.join(''));
+if (boundedDocument.nested.length !== 128 || boundedDocument.events.length !== 3)
+    throw new Error('Bounded nested trace document changed during encoding');
+
 print('ok - trace JSON is serialized in bounded incremental chunks');
