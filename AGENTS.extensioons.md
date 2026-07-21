@@ -267,7 +267,7 @@ reference defaults are compatibility constraints:
 
 | Plugin | Required source/default | Maintained presentation |
 |---|---|---|
-| system monitor | Linux `/proc` and `/sys` counters | legacy `cpu`/`mem`/`io`, arrows, `KBs`/`MBs`, and 9 px monospace remain the default; compact is opt-in |
+| system monitor | Linux `/proc` and `/sys` counters | legacy `cpu`/`mem`/`io`, arrows, `KBs`/`MBs`, and 13 px monospace remain the default; compact is opt-in |
 | Dependabot | GitHub Dependabot alerts API | hidden at zero; urgent-update symbolic icon and count; up to five direct alert links |
 | pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
 | VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; VPN symbolic icon; private country/city details with no public IP |
