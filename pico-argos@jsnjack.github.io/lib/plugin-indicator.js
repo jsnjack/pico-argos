@@ -165,7 +165,12 @@ export class PluginIndicator {
                 panel.text,
                 'label-text-writes');
             writes += textWrites;
-            if (textWrites !== 0)
+            // ClutterText normally queues its own redraw, but GNOME Shell 50's
+            // offscreen-cached StLabel left stale pixels on the affected
+            // fractional-scale display when only that narrow damage was used.
+            // A real-session paired A/B found no material FPS or freeze cost
+            // from widening damage to this retained panel button.
+            if (textWrites !== 0 && this._actions.useExplicitPanelRedraw())
                 this.actor.queue_redraw();
         }
         writes += this._write(

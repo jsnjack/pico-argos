@@ -7,18 +7,31 @@ import System from 'system';
 import {comparePresentationRuns} from './presentation.js';
 
 const MAX_SUMMARY_BYTES = 1 * 1_024 * 1_024;
-if (ARGV.length < 10 || ARGV.length % 2 !== 0) {
+const args = [...ARGV];
+let practicalMarginPercent = null;
+if (args[0] === '--practical-margin-percent') {
+    practicalMarginPercent = Number(args[1]);
+    args.splice(0, 2);
+}
+if (args.length < 10 || args.length % 2 !== 0 ||
+    (practicalMarginPercent !== null &&
+        !(practicalMarginPercent > 0))) {
     throw new Error(
-        'Usage: compare-presentation.js BASELINE_JSON SCENARIO_JSON ' +
+        'Usage: compare-presentation.js [--practical-margin-percent N] ' +
+        'BASELINE_JSON SCENARIO_JSON ' +
         '[BASELINE_JSON SCENARIO_JSON ...]');
 }
 const baselines = [];
 const scenarios = [];
-for (let index = 0; index < ARGV.length; index += 2) {
-    baselines.push(readJson(ARGV[index]));
-    scenarios.push(readJson(ARGV[index + 1]));
+for (let index = 0; index < args.length; index += 2) {
+    baselines.push(readJson(args[index]));
+    scenarios.push(readJson(args[index + 1]));
 }
-const comparison = comparePresentationRuns(baselines, scenarios);
+const comparison = comparePresentationRuns(
+    baselines,
+    scenarios,
+    0.1,
+    practicalMarginPercent);
 print(JSON.stringify(comparison, null, 2));
 if (!comparison.frameRateGate.passed)
     System.exit(1);

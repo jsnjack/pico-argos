@@ -78,6 +78,44 @@ process. Read the [plugin guide](./AGENTS.extensioons.md) for installation,
 manifest, protocol, security, and migration rules. [SPEC.md](./SPEC.md) is the
 normative technical contract.
 
+## Generate a performance report
+
+The recommended benchmark is a focused redraw A/B against the real GNOME Shell
+login session. It works with the built-in display, external displays, mixed
+refresh rates, and arbitrary resolutions or scales; it records the active
+layout but does not require a specific one. Keep that layout unchanged during
+one run.
+
+Install the current package, log out and back in once if its JavaScript changed,
+then run:
+
+```bash
+result_dir="performance-results/redraw-ab-$(date +%Y%m%d-%H%M%S)"
+PICO_ARGOS_RUN_SECONDS=20 \
+PICO_ARGOS_PAIRS=5 \
+tests/performance/run-redraw-ab.sh "$result_dir"
+```
+
+This performs 200 seconds of timed capture and normally finishes in about
+3½–4 minutes including settling and report generation. Both roles keep the
+same extension, plugins, display configuration, and workload; only the explicit
+parent redraw changes. The decision uses a paired Student-t 95% confidence
+interval with a practical ±1% margin and separately checks for presentation
+gaps of at least 50 ms. It reports `INCONCLUSIVE` rather than forcing a claim
+when the short sample cannot decide.
+
+Regenerate the Markdown from retained artifacts without measuring again:
+
+```bash
+tests/performance/run-performance-report.sh \
+  --report-only performance-results/redraw-ab-YYYYMMDD-HHMMSS
+```
+
+The optional exhaustive release-certification matrix remains available, but is
+not the normal diagnostic workflow. See the
+[performance tooling guide](./tests/performance/README.md) for prerequisites,
+methodology, artifact descriptions, interpretation, and that longer procedure.
+
 ## Development
 
 Run the complete validation gate before committing:
@@ -99,6 +137,5 @@ make install    # install the local package
 make standards  # refresh project conventions
 ```
 
-Detailed performance capture and physical A/B procedures are documented in
-[tests/performance/README.md](./tests/performance/README.md). A green build does
-not replace the target-hardware frame-latency and stability runs.
+A green build does not replace the target-hardware frame-latency and stability
+runs.

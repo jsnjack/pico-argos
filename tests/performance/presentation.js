@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 const UI_APPLY_END = 1;
+const DELAYED_REFRESH_MULTIPLIER = 1.5;
+const MULTI_REFRESH_GAP_MULTIPLIER = 2.5;
+const FREEZE_LIKE_GAP_NANOSECONDS = 50_000_000;
 
 /** Summarizes continuous wp_presentation feedback without inventing FPS samples. */
 export function summarizePresentation(events, coreTrace = null) {
@@ -53,6 +56,10 @@ export function summarizePresentation(events, coreTrace = null) {
         presentationTimes.at(-1) - presentationTimes[0]);
     const longIntervals = longFlags.filter(Boolean).length;
     const clusters = summarizeClusters(longFlags);
+    const framePacing = summarizeFramePacing(
+        intervals,
+        refreshCounts,
+        durationNanoseconds);
     const correlation = correlateUiApplies(
         presentationTimes,
         longFlags,
@@ -74,6 +81,7 @@ export function summarizePresentation(events, coreTrace = null) {
         refreshPeriods: [...refreshCounts]
             .sort((left, right) => left[0] - right[0])
             .map(([nanoseconds, count]) => ({nanoseconds, count})),
+        framePacing,
         longIntervals: {
             thresholdRefreshMultiplier: 1.5,
             count: longIntervals,
@@ -85,8 +93,99 @@ export function summarizePresentation(events, coreTrace = null) {
     };
 }
 
+/**
+ * Describes user-visible pacing separately from the strict delivered-FPS gate.
+ *
+ * A continuously committing probe normally runs at the fastest active cadence.
+ * On VRR outputs presentation-time reports refresh=0, so the fastest decile of
+ * observed intervals is used as a descriptive cadence estimate. That estimate
+ * must not be promoted to an authoritative refresh-period acceptance gate.
+ */
+function summarizeFramePacing(intervals, refreshCounts, durationNanoseconds) {
+    const cadence = selectNominalCadence(intervals, refreshCounts);
+    const delayedFlags = intervals.map(
+        value => value > DELAYED_REFRESH_MULTIPLIER * cadence.nanoseconds);
+    const multiRefreshFlags = intervals.map(
+        value => value > MULTI_REFRESH_GAP_MULTIPLIER * cadence.nanoseconds);
+    const freezeLikeFlags = intervals.map(
+        value => value >= FREEZE_LIKE_GAP_NANOSECONDS);
+    const delayedClusters = summarizeClusters(delayedFlags);
+    const delayedCount = delayedFlags.filter(Boolean).length;
+    const multiRefreshCount = multiRefreshFlags.filter(Boolean).length;
+    const freezeLikeCount = freezeLikeFlags.filter(Boolean).length;
+    const maximumGap = intervals.reduce(
+        (maximum, value) => Math.max(maximum, value), 0);
+    const freezeLikeGaps = intervals.filter(
+        value => value >= FREEZE_LIKE_GAP_NANOSECONDS);
+    const estimatedMissedRefreshes = intervals.reduce((total, value) => {
+        if (value <= DELAYED_REFRESH_MULTIPLIER * cadence.nanoseconds)
+            return total;
+        return total + Math.max(1, Math.round(value / cadence.nanoseconds) - 1);
+    }, 0);
+
+    let experienceClass = 'steady-cadence';
+    if (freezeLikeCount !== 0)
+        experienceClass = 'freeze-like-pauses-detected';
+    else if (delayedCount !== 0)
+        experienceClass = 'misses-without-freeze-like-pauses';
+
+    return {
+        cadenceSource: cadence.source,
+        nominalIntervalNanoseconds: cadence.nanoseconds,
+        nominalFramesPerSecond: 1_000_000_000 / cadence.nanoseconds,
+        cadenceIsInferred: cadence.inferred,
+        delayedRefreshThresholdMultiplier: DELAYED_REFRESH_MULTIPLIER,
+        delayedIntervals: {
+            count: delayedCount,
+            perTenThousand: 10_000 * delayedCount / intervals.length,
+            clusterCount: delayedClusters.count,
+            maximumClusterLength: delayedClusters.maximum,
+        },
+        multiRefreshGapThresholdMultiplier: MULTI_REFRESH_GAP_MULTIPLIER,
+        multiRefreshGaps: {
+            count: multiRefreshCount,
+            perTenThousand: 10_000 * multiRefreshCount / intervals.length,
+        },
+        estimatedMissedRefreshes,
+        freezeLikePauses: {
+            thresholdNanoseconds: FREEZE_LIKE_GAP_NANOSECONDS,
+            detected: freezeLikeCount !== 0,
+            count: freezeLikeCount,
+            perMinute: durationNanoseconds > 0
+                ? 60_000_000_000 * freezeLikeCount / durationNanoseconds
+                : null,
+            longestNanoseconds: freezeLikeGaps.length === 0
+                ? null
+                : freezeLikeGaps.reduce(
+                    (maximum, value) => Math.max(maximum, value), 0),
+        },
+        maximumGapNanoseconds: maximumGap,
+        maximumGapRefreshPeriods: maximumGap / cadence.nanoseconds,
+        experienceClass,
+    };
+}
+
+function selectNominalCadence(intervals, refreshCounts) {
+    if (refreshCounts.size !== 0) {
+        const [nanoseconds] = [...refreshCounts]
+            .sort((left, right) => right[1] - left[1] || left[0] - right[0])[0];
+        return {source: 'presentation-feedback', nanoseconds, inferred: false};
+    }
+
+    const ordered = [...intervals].sort((left, right) => left - right);
+    return {
+        source: 'observed-fastest-decile',
+        nanoseconds: percentile(ordered, 0.10),
+        inferred: true,
+    };
+}
+
 /** Compares paired, interleaved baseline/scenario presentation summaries. */
-export function comparePresentationRuns(baselines, scenarios, limitPercent = 0.1) {
+export function comparePresentationRuns(
+    baselines,
+    scenarios,
+    limitPercent = 0.1,
+    practicalMarginPercent = null) {
     if (!Array.isArray(baselines) || !Array.isArray(scenarios) ||
         baselines.length !== scenarios.length || baselines.length < 5) {
         throw new Error('Presentation comparison requires at least five paired runs');
@@ -104,6 +203,9 @@ export function comparePresentationRuns(baselines, scenarios, limitPercent = 0.1
     const scenarioFps = scenarios.map(run => run.deliveredFramesPerSecond);
     const baselineLong = baselines.map(run => run.longIntervals.perTenThousand);
     const scenarioLong = scenarios.map(run => run.longIntervals.perTenThousand);
+    const practicalEffect = practicalMarginPercent === null
+        ? null
+        : classifyPracticalEffect(confidence, practicalMarginPercent);
     return {
         formatVersion: 1,
         project: 'pico-argos',
@@ -122,6 +224,27 @@ export function comparePresentationRuns(baselines, scenarios, limitPercent = 0.1
             maximumAbsoluteMeanChangePercent: limitPercent,
             passed: Math.abs(meanChangePercent) <= limitPercent,
         },
+        practicalEffect,
+    };
+}
+
+function classifyPracticalEffect(confidence, marginPercent) {
+    if (!(marginPercent > 0) || !Number.isFinite(marginPercent))
+        throw new Error('Practical effect margin must be a positive number');
+
+    let decision = 'inconclusive';
+    if (confidence.high < -marginPercent)
+        decision = 'material-regression';
+    else if (confidence.low > marginPercent)
+        decision = 'material-improvement';
+    else if (confidence.low >= -marginPercent &&
+        confidence.high <= marginPercent)
+        decision = 'no-material-effect';
+
+    return {
+        marginPercent,
+        decision,
+        conclusive: decision !== 'inconclusive',
     };
 }
 

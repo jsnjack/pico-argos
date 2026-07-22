@@ -26,6 +26,8 @@ required logout/login cycle, per the root [`AGENTS.md`](../../AGENTS.md).
 | `monitor-state.js` | CLI: prints the current physical/logical monitor layout; `--require-dual-120` fails unless exactly two monitors are active at 120 Hz. |
 | `capture-presentation-run.sh` | Captures one timed run: presentation NDJSON, diagnostics before/after, display state, `pidstat`, RSS samples, best-effort `perf`, and the journal window. |
 | `run-acceptance.sh` | Stages isolated fixture/reference plugins, drives the full paired-run and one-hour matrix, and writes a final `result.json`. |
+| `run-performance-report.sh` | Runs the full matrix and writes a detailed Markdown/terminal report, or regenerates the report from existing artifacts. |
+| `run-redraw-ab.sh` | Alternates label-only updates and explicit panel-button redraws inside one live instrumented Shell session. |
 | `correlation.js` / `analyze-correlation.js` | Correlates the system-monitor plugin's own sample deadlines with the core's opt-in UI-apply trace, independent of the presentation probe. |
 | `plugins/perf-constant`, `perf-changing`, `perf-oneshot` | Minimal public-protocol fixture plugins used as isolated load scenarios (see below). |
 
@@ -77,11 +79,16 @@ tests/performance/analyze-presentation.js OUTPUT_DIR/presentation.ndjson [CORE_T
 Prints delivered FPS, interval/callback-latency/submission-latency
 percentiles (p50/p95/p99/max), discarded-frame count, refresh-period
 histogram, count and largest cluster of intervals exceeding 1.5x the refresh
-period, and — when a core opt-in trace JSON is supplied and its clock is
-`CLOCK_MONOTONIC` — how many intervals (and long intervals) had a correlated
-`UI_APPLY_END` event. Bounded to 256 MiB / 500,000 NDJSON events; a full
-one-hour run at 120 Hz produces about 432,000 presented-frame lines (roughly
-100 MB at this probe's line size), comfortably inside both limits.
+period, and a separate frame-pacing profile. The profile reports delayed
+intervals, estimated missed refreshes, gaps longer than 2.5 refresh periods,
+the worst gap, and freeze-like presentation gaps of at least 50 ms. This
+distinguishes isolated 16.7 ms misses at 120 Hz from pauses that can plausibly
+look like the original Argos freeze. When a core opt-in trace JSON is supplied
+and its clock is `CLOCK_MONOTONIC`, the summary also reports how many intervals
+(and long intervals) had a correlated `UI_APPLY_END` event. Bounded to 256 MiB
+/ 500,000 NDJSON events; a full one-hour run at 120 Hz produces about 432,000
+presented-frame lines (roughly 100 MB at this probe's line size), comfortably
+inside both limits.
 
 **Known limitation on real hardware:** per version 1 of the presentation-time
 protocol, a compositor reports `refresh = 0` whenever an output's rate isn't
@@ -92,8 +99,13 @@ outputs), so the long-interval count and refresh-period histogram above read
 as empty/zero unconditionally — this reflects the protocol working as
 specified, not jank-free delivery. It does not affect delivered FPS or the
 paired-comparison confidence interval in step 4, which remain authoritative.
-The nested virtual-monitor test fixture is not VRR-capable and reports real
-refresh periods, so this only applies to live acceptance runs.
+The descriptive frame-pacing profile remains available by estimating the
+active cadence from the fastest 10% of this continuously committing probe's
+observed intervals. The report labels that source `observed-fastest-decile`;
+it is useful for discriminating misses from freeze-like gaps but is not treated
+as authoritative refresh metadata or an acceptance gate. The nested
+virtual-monitor test fixture is not VRR-capable and reports real refresh
+periods, so this fallback only applies to live acceptance runs.
 
 ## 4. Compare paired runs
 
@@ -161,6 +173,115 @@ output directory summarizes pass/fail across every comparison and the
 one-hour check; a nonzero exit means at least one comparison or the
 steady-state check failed its gate.
 
-No live acceptance run has been executed by an agent. Do not claim physical
-frame-latency or one-hour stability acceptance until this matrix has actually
-been run, with fresh explicit authorization, against the target hardware.
+Every physical report applies to the hardware, display layout, power profile,
+and software recorded in its artifacts. Do not generalize one machine's absolute
+FPS to another machine; paired branch comparisons remain useful because both
+roles run under the same recorded conditions.
+
+## 8. Recommended: focused report in under five minutes
+
+Run this from a terminal in the real GNOME Wayland login session, not from a
+nested Shell, SSH session, or sandbox. The focused runner accepts any active
+monitor count, resolution, refresh rate, or scale. It records the layout and
+uses the cadence reported by presentation feedback, or the observed fastest
+cadence when VRR causes the protocol to report zero. Do not connect, disconnect,
+or reconfigure displays during one run.
+
+Before starting:
+
+1. Install the current package with `make install`; it contains the hidden
+   diagnostic selector used by this focused test.
+2. Log out and back in once if its installed JavaScript changed.
+3. Enable pico-argos and the normal plugins whose redraw workload matters.
+4. Install the probe dependencies from step 1 and ensure `gdbus`, `gjs`,
+   `gnome-extensions`, `gsettings`, `jq`, `journalctl`, and `pidstat` are
+   available. `perf` is optional.
+
+The output path must not already exist:
+
+```bash
+result_dir="performance-results/redraw-ab-$(date +%Y%m%d-%H%M%S)"
+PICO_ARGOS_RUN_SECONDS=20 \
+PICO_ARGOS_PAIRS=5 \
+tests/performance/run-redraw-ab.sh "$result_dir"
+```
+
+The default has 200 seconds of timed capture plus one-second settling between
+roles, probe compilation, and report generation. It normally completes in about
+3½–4 minutes.
+
+### Focused methodology
+
+The live extension and plugin set stay enabled for both roles. The baseline
+writes changed label text and relies on Clutter's automatic damage. The scenario
+performs the identical write and additionally queues a redraw on the parent
+panel button. The runner changes the hidden `performance-explicit-redraw`
+setting in the already-loaded Shell and confirms the selected branch over D-Bus;
+it does not reload the extension between roles.
+
+Five pairs alternate baseline/scenario order to reduce temperature and
+time-order bias. A continuously committing 64×64 Wayland surface records actual
+`wp_presentation_feedback` timestamps while `pidstat`, RSS samples, diagnostic
+summaries, and the Shell journal provide supporting evidence. The probe window
+does not contain pico-argos; it stimulates and measures the same compositor that
+renders the real panel extension.
+
+The quick decision compares paired FPS changes using a Student-t 95% confidence
+interval and a practical ±1% effect margin:
+
+- Entire interval below −1%: `MATERIAL REDRAW REGRESSION`.
+- Entire interval above +1%: `MATERIAL REDRAW IMPROVEMENT`.
+- Entire interval inside ±1%: `NO MATERIAL REDRAW EFFECT`.
+- Interval crosses a boundary: `INCONCLUSIVE`.
+
+Frame pacing is reported separately: intervals over 1.5 observed refresh
+periods, gaps over 2.5 periods, estimated missed refreshes, the worst gap, and
+freeze-like gaps of at least 50 ms. This distinguishes dropped refreshes from
+the original visible-freeze symptom.
+
+The runner restores the original redraw setting on success, failure, interrupt,
+or termination. It writes raw artifacts, `result.json`, and a detailed
+`report.md` below `$result_dir`.
+
+Regenerate the report without measuring again:
+
+```bash
+tests/performance/run-performance-report.sh --report-only /path/to/output-dir
+```
+
+A nonzero exit can mean a material regression or an inconclusive result; the
+report is still generated. Read its `Overall result` instead of treating exit
+zero as the only sign that rendering completed.
+
+## 9. Optional exhaustive release certification
+
+The full matrix in step 7 remains available for release certification against
+the historical dual-120-Hz target. It is intentionally not the everyday
+diagnostic and, unlike the focused test, enforces that target display layout:
+
+```bash
+result_dir="performance-results/full-$(date +%Y%m%d-%H%M%S)"
+tests/performance/run-performance-report.sh "$result_dir"
+```
+
+Its defaults are five pairs, 60 seconds per capture, two diagnostics modes,
+five scenarios, and a 3,600-second stability phase: at least 9,600 seconds
+(2 hours 40 minutes) of timed capture. `PICO_ARGOS_PAIRS`,
+`PICO_ARGOS_RUN_SECONDS`, and `PICO_ARGOS_ONE_HOUR_SECONDS` override those
+values within the bounds described in step 7.
+
+## 10. What the Mutter DevKit window tests
+
+`make check` starts a separate GNOME Shell 50 with Mutter DevKit, an isolated
+D-Bus and XDG directory tree, and one virtual 1280×720@60 monitor. It unpacks the
+production extension and runs a smoke plugin through discovery, process
+lifecycle, protocol, diagnostics, preferences, trace export, reload, and
+teardown checks. A test-only actor extension then imports the production
+`PluginIndicator`, inserts actors into the nested panel, and performs retained
+actor, menu, mutation, and redraw-branch assertions.
+
+Those operations are programmatic and often finish too quickly to inspect in
+the DevKit window. The two-second presentation probe there verifies only that
+the test compositor supplies continuous feedback at 60 Hz. Nested DevKit
+results prove functional integration; they are never physical performance,
+artifact, 120-Hz, GPU-driver, or real-login-session evidence.

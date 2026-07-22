@@ -16,5 +16,10 @@
       <summary>Disabled plugin identifiers</summary>
       <description>Validated discovered plugins that must not be started or rendered.</description>
     </key>
+    <key name="performance-explicit-redraw" type="b">
+      <default>true</default>
+      <summary>Use the explicit panel redraw path</summary>
+      <description>Hidden diagnostic selector for focused physical redraw comparisons.</description>
+    </key>
   </schema>
 </schemalist>

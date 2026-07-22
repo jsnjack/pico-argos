@@ -40,7 +40,9 @@ export default class ActorHarnessExtension extends Extension {
 
     _runAssertions() {
         this._diagnostics = new Diagnostics();
+        let useExplicitPanelRedraw = true;
         const actions = {
+            useExplicitPanelRedraw: () => useExplicitPanelRedraw,
             refreshOnOpen() {},
             refreshNow() {},
             restartStream() {},
@@ -92,6 +94,26 @@ export default class ActorHarnessExtension extends Extension {
         assert(changed['actor-creations'] === initialized['actor-creations'] &&
             changed['actor-destructions'] === initialized['actor-destructions'],
         'Changing text created or destroyed an actor');
+
+        useExplicitPanelRedraw = false;
+        const beforeLabelOnly = mutations(this._diagnostics);
+        const redrawsBeforeLabelOnly = panelRedraws;
+        for (let index = 10_000; index < 20_000; index++) {
+            this._indicator.applyPresentation(
+                presentation(String(index).padStart(5, '0'), baseMenu()));
+        }
+        const afterLabelOnly = mutations(this._diagnostics);
+        assert(panelRedraws === redrawsBeforeLabelOnly,
+            'Label-only text changes queued explicit panel redraws');
+        assert(afterLabelOnly['label-text-writes'] -
+            beforeLabelOnly['label-text-writes'] === 10_000,
+        'Label-only mode suppressed or duplicated text writes');
+        assert(afterLabelOnly['actor-creations'] ===
+            beforeLabelOnly['actor-creations'] &&
+            afterLabelOnly['actor-destructions'] ===
+            beforeLabelOnly['actor-destructions'],
+        'Label-only text changes created or destroyed an actor');
+        useExplicitPanelRedraw = true;
 
         assert(changed['actor-creations'] === 8,
             'Closed menu created actors beyond the eagerly built footer before first open');

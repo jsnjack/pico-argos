@@ -49,6 +49,8 @@ export class ExtensionController {
             this._clock,
             this._diagnostics,
             {
+                useExplicitPanelRedraw: () => this._settings.get_boolean(
+                    'performance-explicit-redraw'),
                 refreshOnOpen: pluginId => this._runtime?.refreshOnOpen(pluginId),
                 refreshNow: pluginId => this._runtime?.refreshNow(pluginId),
                 restartStream: pluginId => this._runtime?.restartStream(pluginId),
@@ -60,7 +62,11 @@ export class ExtensionController {
             clock: this._clock,
             diagnostics: this._diagnostics,
             stageTrace: this._stageTrace,
-            getRuntimeSnapshot: () => this._runtime?.snapshot() ?? {},
+            getRuntimeSnapshot: () => ({
+                ...(this._runtime?.snapshot() ?? {}),
+                explicitPanelRedraw: this._settings.get_boolean(
+                    'performance-explicit-redraw'),
+            }),
             getPlugins: () => [...this._plugins.values()].filter(plugin =>
                 isPluginEnabled(this._disabledPluginIds, plugin.id)),
             getRegistryErrors: () => [...this._registryErrors],

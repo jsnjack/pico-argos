@@ -78,6 +78,7 @@ fi
 jq -n \
     --arg scenario "${PICO_ARGOS_SCENARIO:-manual}" \
     --arg diagnosticsMode "${PICO_ARGOS_DIAGNOSTICS_MODE:-unknown}" \
+    --arg redrawMode "${PICO_ARGOS_REDRAW_MODE:-unknown}" \
     --arg runRole "${PICO_ARGOS_RUN_ROLE:-unpaired}" \
     --arg pair "${PICO_ARGOS_PAIR:-0}" \
     --arg commit "$(git -C "$repo_root" rev-parse HEAD)" \
@@ -90,7 +91,8 @@ jq -n \
     --argjson shellPid "$shell_pid" \
     --argjson durationSeconds "$duration_seconds" \
     '{formatVersion:1, project:"pico-argos", scenario:$scenario,
-      diagnosticsMode:$diagnosticsMode, runRole:$runRole, pair:$pair,
+      diagnosticsMode:$diagnosticsMode, redrawMode:$redrawMode,
+      runRole:$runRole, pair:$pair,
       commit:$commit, packageSha256:$packageSha256,
       shellVersion:$shellVersion, gjsVersion:$gjsVersion,
       powerProfile:$powerProfile, startEpoch:$startEpoch,
