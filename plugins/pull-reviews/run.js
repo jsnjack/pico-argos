@@ -20,8 +20,7 @@ try {
     const issueRepository = GLib.getenv('GITHUB_ISSUE_REPOSITORY') ?? 'surfly/it';
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(issueRepository))
         throw new Error('GITHUB_ISSUE_REPOSITORY must have owner/name form');
-    const repositoryQuery = repositories.map(value => `repo:${value}`).join(' ');
-    const searchQuery = `is:pr is:open draft:false review-requested:${user} ${repositoryQuery}`;
+    const searchQuery = `is:pr is:open draft:false review-requested:${user}`;
     const data = requestGraphql(token, searchQuery);
     if (Array.isArray(data.errors) && data.errors.length !== 0)
         throw new Error('GitHub GraphQL returned an error');

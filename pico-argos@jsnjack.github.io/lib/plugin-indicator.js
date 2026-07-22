@@ -93,7 +93,9 @@ export class PluginIndicator {
             this._applyReservedWidth(this._panel.appearance);
         if (this._footerBuilt) {
             const isStream = plugin.manifest.mode === 'stream';
-            this._setActionState(this._refreshItem, !isStream);
+            const canRefreshManually = !isStream &&
+                !plugin.manifest.refreshOnOpen;
+            this._setActionState(this._refreshItem, canRefreshManually);
             this._setActionState(this._restartItem, isStream);
         }
         if (this._panel !== null)
@@ -284,11 +286,13 @@ export class PluginIndicator {
         this._recordCreation();
         this.actor.menu.addMenuItem(this._footerSeparator);
         const isStream = this.plugin.manifest.mode === 'stream';
+        const canRefreshManually = !isStream &&
+            !this.plugin.manifest.refreshOnOpen;
         this._refreshItem = new PopupMenu.PopupMenuItem('Refresh now', {
-            reactive: !isStream,
-            can_focus: !isStream,
+            reactive: canRefreshManually,
+            can_focus: canRefreshManually,
         });
-        this._refreshItem.visible = !isStream;
+        this._refreshItem.visible = canRefreshManually;
         this._recordCreation();
         this._refreshSignalId = this._refreshItem.connect(
             'activate',

@@ -89,7 +89,9 @@ session environment configuration is unsuitable.
 Use `oneshot` for bounded, infrequent work such as one HTTP query. It produces
 exactly one snapshot and exits successfully. pico-argos phases intervals,
 coalesces duplicate work, prioritizes menu-open refreshes, and runs at most one
-one-shot child globally.
+one-shot child globally. A one-shot plugin with `refreshOnOpen: true` refreshes
+as its menu opens and does not show the redundant `Refresh now` action. A
+one-shot plugin with `refreshOnOpen: false` retains that explicit action.
 
 Use `stream` for frequent or stateful updates where recurring spawn cost would
 matter. One foreground process emits newline-delimited snapshots and optional

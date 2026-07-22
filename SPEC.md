@@ -814,6 +814,10 @@ for periodic data changes.
 - The fixed separator and `Refresh now`/`Restart plugin`/`Extension settings`
   items are created once, on attach, so the menu box is never empty; an
   empty `PopupMenu` cannot be opened by any means, including a real click.
+  `Refresh now` is visible only for one-shot plugins whose `refreshOnOpen` is
+  false. A plugin that already refreshes when opened MUST NOT expose a
+  redundant manual refresh action. `Restart plugin` is visible only for stream
+  plugins.
 - No plugin-provided menu content actors are created until first open.
 - After first open, plugin-provided actors are retained and keyed by item ID.
 - Opening applies the latest snapshot before display.

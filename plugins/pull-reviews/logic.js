@@ -36,10 +36,10 @@ export function pullReviewsSnapshot(search, user, repositories, issueRepository 
         version: 1,
         type: 'snapshot',
         panel: {
-            text: count === 0 ? null : String(Math.min(count, 999)),
+            text: count === 0 ? null : superscript(Math.min(count, 999)),
             icon: count === 0
                 ? 'object-select-symbolic'
-                : 'document-edit-symbolic',
+                : 'checkbox-symbolic',
             appearance: 'compact',
             accessibleName: count === 0
                 ? 'No pull requests awaiting review'
@@ -52,6 +52,12 @@ export function pullReviewsSnapshot(search, user, repositories, issueRepository 
 
 function link(id, text, uri) {
     return {id, kind: 'link', text, uri};
+}
+
+const SUPERSCRIPT_DIGITS = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
+
+function superscript(count) {
+    return [...String(count)].map(digit => SUPERSCRIPT_DIGITS[digit]).join('');
 }
 
 function normalizePullRequest(value) {

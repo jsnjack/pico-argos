@@ -184,7 +184,10 @@ export default class ActorHarnessExtension extends Extension {
      * own open-on-first-use assertions below.
      */
     _assertMenuOpensBeforeAnyContent(actions) {
-        const plugin = fixturePlugin('actor-footer-check', 30);
+        const plugin = fixturePlugin(
+            'actor-footer-check',
+            30,
+            {mode: 'oneshot', refreshOnOpen: true});
         this._footerCheck = new PluginIndicator(
             plugin,
             {nowUs: () => GLib.get_monotonic_time()},
@@ -200,10 +203,33 @@ export default class ActorHarnessExtension extends Extension {
         assert(this._footerCheck.actor.menu.isOpen === true,
             'menu.toggle() did not actually open the menu before any content arrived');
         this._footerCheck.actor.menu.close(BoxPointer.PopupAnimation.NONE);
+
+        assert(this._footerCheck._refreshItem.visible === false &&
+            this._footerCheck._refreshItem.reactive === false &&
+            this._footerCheck._refreshItem.can_focus === false,
+        'Automatic open-refresh plugin exposed a redundant manual refresh action');
+
+        this._footerCheck.reconfigure(fixturePlugin(
+            'actor-footer-check',
+            30,
+            {mode: 'oneshot', refreshOnOpen: false}));
+        assert(this._footerCheck._refreshItem.visible === true &&
+            this._footerCheck._refreshItem.reactive === true &&
+            this._footerCheck._refreshItem.can_focus === true,
+        'Manual-refresh plugin did not expose its refresh action');
+
+        this._footerCheck.reconfigure(fixturePlugin(
+            'actor-footer-check',
+            30,
+            {mode: 'oneshot', refreshOnOpen: true}));
+        assert(this._footerCheck._refreshItem.visible === false &&
+            this._footerCheck._refreshItem.reactive === false &&
+            this._footerCheck._refreshItem.can_focus === false,
+        'Manifest reconfiguration retained a redundant manual refresh action');
     }
 }
 
-function fixturePlugin(id, order) {
+function fixturePlugin(id, order, overrides = {}) {
     return {
         id,
         manifest: {
@@ -212,6 +238,7 @@ function fixturePlugin(id, order) {
             position: 'right',
             order,
             reserveTextChars: 5,
+            ...overrides,
         },
     };
 }

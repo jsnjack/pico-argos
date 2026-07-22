@@ -16,7 +16,7 @@ const requested = pullReviewsSnapshot({
         repository: {nameWithOwner: 'example/project'},
     }],
 }, 'octocat', ['example/project']);
-if (requested.panel.text !== '12' || requested.panel.icon !== 'document-edit-symbolic' ||
+if (requested.panel.text !== '¹²' || requested.panel.icon !== 'checkbox-symbolic' ||
     requested.menu.find(item => item.id === 'requested-0')?.text !==
         'example/project #42 — Make the status menu clearer' ||
     requested.menu.filter(item => item.kind === 'link')
