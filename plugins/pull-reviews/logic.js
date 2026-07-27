@@ -36,11 +36,11 @@ export function pullReviewsSnapshot(search, user, repositories, issueRepository 
         version: 1,
         type: 'snapshot',
         panel: {
-            text: count === 0 ? null : superscript(Math.min(count, 999)),
+            text: count === 0 ? null : `PR${superscript(Math.min(count, 999))}`,
             icon: count === 0
                 ? 'object-select-symbolic'
-                : 'checkbox-symbolic',
-            appearance: 'compact',
+                : null,
+            appearance: 'monospace',
             accessibleName: count === 0
                 ? 'No pull requests awaiting review'
                 : `${count} pull ${count === 1 ? 'request' : 'requests'} awaiting review`,

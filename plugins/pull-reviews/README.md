@@ -9,7 +9,9 @@ repository the token can see — matching GitHub's own "All review requests"
 list — and returns at most five actionable pull request titles; the token is
 sent only in an in-process HTTP header. `GITHUB_REPOSITORIES` no longer scopes
 the search itself; it only supplies the organization used by the My pull
-requests link. Adwaita symbolic icons distinguish the all-clear and
-review-needed states, and the panel count renders in superscript digits. The
+requests link. The all-clear state shows an Adwaita checkmark with no text;
+the review-needed state drops the icon and renders `PR` followed by a
+superscript digit count (e.g. `PR¹²`) in a monospace panel appearance, so the
+reserved width stays constant as the count crosses digit boundaries. The
 existing review, assignment, authored-pull-request, and issue destinations
 remain in the menu.
