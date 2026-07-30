@@ -172,6 +172,20 @@ export default class ActorHarnessExtension extends Extension {
             afterSelection['actor-destructions'] === beforeSelection['actor-destructions'],
         'Changing action selection recreated a menu actor');
 
+        // Regression test for a real bug: PopupBaseMenuItem freezes
+        // activatability on the reactive flag passed to its constructor, and a
+        // non-activatable item permanently disables the ClickGesture that
+        // turns a pointer press into 'activate'. An action first seen as
+        // selected therefore stayed unclickable forever once the plugin
+        // selected a different one. Writing `reactive` back to true hid the
+        // defect, so assert on the item's own sensitivity and on the gesture
+        // rather than on the flags the previous implementation set.
+        assert(selectedAction.reactive && selectedAction.can_focus &&
+            selectedAction.sensitive,
+        'Deselected action did not become interactive again');
+        assert(selectedAction.get_actions().some(action => action.enabled),
+            'Deselected action cannot recognize a pointer click');
+
         const beforeReorder = mutations(this._diagnostics);
         this._indicator.applyPresentation(
             presentation('09999', [...actionMenu].reverse()));

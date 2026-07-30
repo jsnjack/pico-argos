@@ -20,6 +20,7 @@ const DEFAULT_SOURCE_CLASS = 'Audio/Source';
 const HEARTBEAT_SECONDS = 5;
 const INPUT_READ_BYTES = 1_024;
 const MAX_INPUT_LINE_BYTES = 4_096;
+const MAX_ROUTE_DUMP_BYTES = 8 * 1_024 * 1_024;
 const STATE_COALESCE_MS = 50;
 
 const encoder = new TextEncoder();
@@ -36,6 +37,9 @@ let configuration = null;
 let lastSnapshot = null;
 let actionTargets = new Map();
 let pendingInput = new Uint8Array();
+let cardPorts = new Map();
+let portRefresh = null;
+let portsReported = false;
 let stateSourceId = 0;
 let stateForce = false;
 let heartbeatSourceId = 0;
@@ -70,6 +74,7 @@ try {
     connect(core, 'disconnected', () => fail(
         new Error('WirePlumber core disconnected')));
 
+    await refreshPorts();
     emitSnapshot(true);
     readInput();
     heartbeatSourceId = GLib.timeout_add_seconds(
@@ -139,11 +144,11 @@ function scheduleSnapshot(force = false) {
             stateSourceId = 0;
             const shouldForce = stateForce;
             stateForce = false;
-            try {
+            refreshPorts().then(() => {
+                if (cancellable.is_cancelled())
+                    return;
                 emitSnapshot(shouldForce);
-            } catch (error) {
-                fail(error);
-            }
+            }).catch(error => fail(error));
             return GLib.SOURCE_REMOVE;
         });
 }
@@ -168,6 +173,11 @@ function collectState() {
             nodeName === null)
             return true;
         const id = String(boundId);
+        const prefix = mediaClass === DEFAULT_SINK_CLASS ? 'output' : 'input';
+        const port = cardPorts.get(portKey(
+            nodeProperty(node, 'device.id'),
+            nodeProperty(node, 'card.profile.device'),
+            prefix === 'output' ? 'Output' : 'Input')) ?? null;
         const device = {
             id,
             nodeName,
@@ -184,8 +194,9 @@ function collectState() {
                 'node.description',
                 'node.name',
             ]),
+            portLabel: port?.description ?? null,
+            portChoices: port?.choices ?? 0,
         };
-        const prefix = mediaClass === DEFAULT_SINK_CLASS ? 'output' : 'input';
         const values = prefix === 'output' ? outputs : inputs;
         values.push(device);
         targets.set(`${prefix}:${id}`, {mediaClass, nodeName});
@@ -218,6 +229,102 @@ function firstProperty(node, keys) {
             return value.trim();
     }
     return 'Unknown audio device';
+}
+
+/**
+ * Refreshes the active port name and port count of every card.
+ *
+ * WirePlumber publishes these as SPA object pods on the device, and GJS cannot
+ * read an object pod's properties: wp_spa_pod_get_property() aborts the
+ * process under introspection. `pw-dump` reports the same Route and EnumRoute
+ * parameters as plain JSON, so one short-lived child at each coalesced device
+ * change replaces the unreadable API. A missing or failing `pw-dump` only
+ * costs port naming, never the snapshot.
+ */
+function refreshPorts() {
+    if (portRefresh !== null)
+        return portRefresh;
+    portRefresh = dumpPorts().then(ports => {
+        cardPorts = ports;
+    }).catch(error => {
+        if (!portsReported && !cancellable.is_cancelled()) {
+            portsReported = true;
+            printerr(`[audio-devices] Port names unavailable: ${error.message}`);
+        }
+    }).finally(() => {
+        portRefresh = null;
+    });
+    return portRefresh;
+}
+
+function dumpPorts() {
+    return new Promise((resolve, reject) => {
+        const process = Gio.Subprocess.new(
+            ['pw-dump'],
+            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+        process.communicate_utf8_async(null, cancellable, (source, result) => {
+            try {
+                const [, stdout] = source.communicate_utf8_finish(result);
+                if (!source.get_successful())
+                    throw new Error('pw-dump exited unsuccessfully');
+                if (typeof stdout !== 'string' ||
+                    stdout.length > MAX_ROUTE_DUMP_BYTES)
+                    throw new Error('pw-dump output is unusable');
+                resolve(parsePorts(JSON.parse(stdout)));
+            } catch (error) {
+                reject(error);
+            }
+        });
+    });
+}
+
+/** Collapses one `pw-dump` document to active port names and port counts. */
+function parsePorts(objects) {
+    const ports = new Map();
+    if (!Array.isArray(objects))
+        throw new Error('pw-dump output is not an array');
+    for (const object of objects) {
+        if (object?.type !== 'PipeWire:Interface:Device')
+            continue;
+        const params = object.info?.params;
+        if (params === null || typeof params !== 'object')
+            continue;
+        for (const route of asArray(params.Route)) {
+            if (!Number.isInteger(route?.device) ||
+                typeof route.direction !== 'string' ||
+                typeof route.description !== 'string')
+                continue;
+            const key = portKey(object.id, route.device, route.direction);
+            ports.set(key, {
+                description: route.description,
+                choices: ports.get(key)?.choices ?? 0,
+            });
+        }
+        for (const route of asArray(params.EnumRoute)) {
+            if (!Array.isArray(route?.devices) ||
+                typeof route.direction !== 'string')
+                continue;
+            for (const device of route.devices) {
+                if (!Number.isInteger(device))
+                    continue;
+                const key = portKey(object.id, device, route.direction);
+                const entry = ports.get(key);
+                if (entry === undefined)
+                    ports.set(key, {description: null, choices: 1});
+                else
+                    entry.choices++;
+            }
+        }
+    }
+    return ports;
+}
+
+function portKey(deviceId, cardDevice, direction) {
+    return `${deviceId}:${cardDevice}:${direction}`;
+}
+
+function asArray(value) {
+    return Array.isArray(value) ? value : [];
 }
 
 function readInput() {

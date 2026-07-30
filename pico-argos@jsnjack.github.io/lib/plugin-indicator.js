@@ -293,21 +293,19 @@ export class PluginIndicator {
         const isStream = this.plugin.manifest.mode === 'stream';
         const canRefreshManually = !isStream &&
             !this.plugin.manifest.refreshOnOpen;
-        this._refreshItem = new PopupMenu.PopupMenuItem('Refresh now', {
-            reactive: canRefreshManually,
-            can_focus: canRefreshManually,
-        });
+        // Both conditional items stay constructed as activatable so a later
+        // manifest change can re-enable them; see _createEntry.
+        this._refreshItem = new PopupMenu.PopupMenuItem('Refresh now');
         this._refreshItem.visible = canRefreshManually;
+        this._refreshItem.setSensitive(canRefreshManually);
         this._recordCreation();
         this._refreshSignalId = this._refreshItem.connect(
             'activate',
             () => this._actions.refreshNow(this.plugin.id));
         this.actor.menu.addMenuItem(this._refreshItem);
-        this._restartItem = new PopupMenu.PopupMenuItem('Restart plugin', {
-            reactive: isStream,
-            can_focus: isStream,
-        });
+        this._restartItem = new PopupMenu.PopupMenuItem('Restart plugin');
         this._restartItem.visible = isStream;
+        this._restartItem.setSensitive(isStream);
         this._recordCreation();
         this._restartSignalId = this._restartItem.connect(
             'activate',
@@ -337,11 +335,16 @@ export class PluginIndicator {
         if (model.kind === 'separator') {
             item = new PopupMenu.PopupSeparatorMenuItem();
         } else {
+            // PopupBaseMenuItem freezes activatability at construction: a
+            // non-reactive item permanently disables its ClickGesture, so a
+            // selected action created here could never be clicked again once
+            // the plugin later selected a different one. Always construct
+            // interactive kinds as activatable and express the current
+            // selection through the dynamic sensitivity path instead.
+            const interactive = model.kind === 'link' || model.kind === 'action';
             item = new PopupMenu.PopupMenuItem(model.text, {
-                reactive: model.kind === 'link' ||
-                    (model.kind === 'action' && !model.selected),
-                can_focus: model.kind === 'link' ||
-                    (model.kind === 'action' && !model.selected),
+                reactive: interactive,
+                can_focus: interactive,
             });
             if (model.kind === 'link') {
                 signalId = item.connect('activate', () => {
@@ -376,8 +379,7 @@ export class PluginIndicator {
     }
 
     _applyActionState(item, selected) {
-        item.reactive = !selected;
-        item.can_focus = !selected;
+        item.setSensitive(!selected);
         item.setOrnament(selected
             ? PopupMenu.Ornament.DOT
             : PopupMenu.Ornament.NONE);
@@ -423,8 +425,10 @@ export class PluginIndicator {
 
     _setActionState(item, active) {
         this._write(item, 'visible', active, 'menu-property-writes');
-        this._write(item, 'reactive', active, 'menu-property-writes');
-        this._write(item, 'can_focus', active, 'menu-property-writes');
+        if (item.sensitive !== active) {
+            item.setSensitive(active);
+            this._diagnostics.recordMutation('menu-property-writes');
+        }
     }
 
     _write(target, property, value, mutation) {

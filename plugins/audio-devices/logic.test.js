@@ -48,7 +48,7 @@ const snapshot = audioSnapshot(state, {
     maxPanelNameChars: 12,
     aliases: {'alsa.input': 'Laptop mic'},
 });
-assertEqual(snapshot.panel.text, 'LinkBuds Fit · Laptop mic', 'current audio panel');
+assertEqual(snapshot.panel.text, 'LinkBuds Fit', 'current audio panel');
 assertEqual(snapshot.menu.filter(item => item.kind === 'action'), [
     {id: 'output:44', kind: 'action', text: 'Built-in Audio Analog Stereo', selected: false},
     {id: 'output:45', kind: 'action', text: 'LinkBuds Fit', selected: true},
@@ -67,12 +67,73 @@ if (!absent.menu.some(item => item.id === 'output-empty') ||
     throw new Error('Absent device state omitted explanatory menu rows');
 
 const long = audioSnapshot({
-    outputs: [{id: 1, nodeName: 'output', label: 'A very long speaker name'}],
-    inputs: [{id: 2, nodeName: 'input', label: 'A very long microphone name'}],
+    outputs: [
+        {id: 1, nodeName: 'output', label: 'A very long speaker name'},
+        {id: 3, nodeName: 'other-output', label: 'Zither'},
+    ],
+    inputs: [
+        {id: 2, nodeName: 'input', label: 'A very long microphone name'},
+        {id: 4, nodeName: 'other-input', label: 'Zither mic'},
+    ],
     defaultOutputId: 1,
     defaultInputId: 2,
 }, {maxPanelNameChars: 8});
 assertEqual(long.panel.text, 'A very … · A very …', 'bounded panel names');
+
+const single = audioSnapshot({
+    outputs: [{id: 1, nodeName: 'output', label: 'Speakers'}],
+    inputs: [{id: 2, nodeName: 'input', label: 'Microphone'}],
+    defaultOutputId: 1,
+    defaultInputId: 2,
+});
+assertEqual(single.panel.text, null, 'unambiguous panel is icon-only');
+assertEqual(
+    single.panel.accessibleName,
+    'Audio output Speakers; microphone Microphone',
+    'icon-only panel keeps an accessible name');
+
+const mixed = audioSnapshot({
+    outputs: [
+        {id: 1, nodeName: 'output', label: 'Speakers'},
+        {id: 3, nodeName: 'other-output', label: 'Headset'},
+    ],
+    inputs: [{id: 2, nodeName: 'input', label: 'Microphone'}],
+    defaultOutputId: 1,
+    defaultInputId: 2,
+});
+assertEqual(mixed.panel.text, 'Speakers', 'only the ambiguous class is named');
+
+const ports = audioSnapshot({
+    outputs: [
+        {
+            id: 1,
+            nodeName: 'alsa.analog',
+            label: 'Built-in Audio Analog Stereo',
+            portLabel: 'Line Out',
+            portChoices: 2,
+        },
+        {
+            id: 3,
+            nodeName: 'alsa.hdmi',
+            label: 'DELL U2719D',
+            portLabel: 'HDMI / DisplayPort',
+            portChoices: 1,
+        },
+    ],
+    inputs: [],
+    defaultOutputId: 1,
+    defaultInputId: null,
+});
+assertEqual(ports.menu.filter(item => item.kind === 'action'), [
+    {id: 'output:3', kind: 'action', text: 'DELL U2719D', selected: false},
+    {id: 'output:1', kind: 'action', text: 'Line Out', selected: true},
+], 'cards with a port choice are named by their active port');
+assertInvalid(() => audioSnapshot({
+    outputs: [{id: 1, nodeName: 'output', label: 'Speakers', portChoices: -1}],
+    inputs: [],
+    defaultOutputId: null,
+    defaultInputId: null,
+}), /port choices/);
 
 const many = Array.from({length: 40}, (_value, index) => ({
     id: index,

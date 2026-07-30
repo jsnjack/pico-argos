@@ -9,12 +9,19 @@ export function audioSnapshot(state, config = {}) {
         device.id === normalized.defaultOutputId) ?? null;
     const input = normalized.inputs.find(device =>
         device.id === normalized.defaultInputId) ?? null;
-    const outputText = panelName(
-        output?.shortLabel ?? 'No output',
-        normalized.nameLimit);
-    const inputText = panelName(
-        input?.shortLabel ?? 'No mic',
-        normalized.nameLimit);
+    // A class with exactly one device offers no choice, so its name only costs
+    // panel width; drop it and let the icon carry the plugin's identity.
+    const parts = [];
+    if (normalized.outputs.length !== 1) {
+        parts.push(panelName(
+            output?.shortLabel ?? 'No output',
+            normalized.nameLimit));
+    }
+    if (normalized.inputs.length !== 1) {
+        parts.push(panelName(
+            input?.shortLabel ?? 'No mic',
+            normalized.nameLimit));
+    }
     const menu = [
         label('output-heading', 'Output'),
         ...deviceActions('output', normalized.outputs, output?.id ?? null),
@@ -31,7 +38,7 @@ export function audioSnapshot(state, config = {}) {
         version: 2,
         type: 'snapshot',
         panel: {
-            text: `${outputText} · ${inputText}`,
+            text: parts.length === 0 ? null : parts.join(' · '),
             icon: 'audio-speakers-symbolic',
             appearance: 'compact',
             accessibleName: `Audio output ${output?.label ?? 'unavailable'}; ` +
@@ -115,7 +122,14 @@ function normalizeDevices(values, aliases, context) {
         requireObject(value, `Audio ${context} device ${index}`);
         rejectUnknown(
             value,
-            new Set(['id', 'nodeName', 'label', 'shortLabel']),
+            new Set([
+                'id',
+                'nodeName',
+                'label',
+                'shortLabel',
+                'portLabel',
+                'portChoices',
+            ]),
             `Audio ${context} device ${index}`);
         const id = String(value.id);
         requireText(id, 96, `Audio ${context} device ${index} ID`);
@@ -126,17 +140,39 @@ function normalizeDevices(values, aliases, context) {
             shortLabel,
             128,
             `Audio ${context} device ${index} short label`);
+        const portLabel = portName(value, `Audio ${context} device ${index}`);
         if (seen.has(id))
             throw new Error(`Audio ${context} device ID is duplicated: ${id}`);
         seen.add(id);
+        const name = aliases[value.nodeName] ?? portLabel;
         return {
             id,
             nodeName: value.nodeName,
-            label: aliases[value.nodeName] ?? value.label.trim(),
-            shortLabel: aliases[value.nodeName] ?? shortLabel.trim(),
+            label: name ?? value.label.trim(),
+            shortLabel: name ?? shortLabel.trim(),
         };
     }).sort((left, right) =>
         left.label.localeCompare(right.label) || left.id.localeCompare(right.id));
+}
+
+/**
+ * Returns the active port description when the card actually offers a choice
+ * of ports for this node, and null otherwise.
+ *
+ * A card exposing several ports for one node is named by the connector the
+ * sound leaves through ("Line Out", "Headphones"). A card exposing exactly one
+ * keeps its device name, which is the more specific identity there — an HDMI
+ * card reports the connected monitor, while its single port is only ever
+ * called "HDMI / DisplayPort".
+ */
+function portName(value, context) {
+    const portLabel = value.portLabel ?? null;
+    if (portLabel !== null)
+        requireText(portLabel, 128, `${context} port label`);
+    const portChoices = value.portChoices ?? 0;
+    if (!Number.isInteger(portChoices) || portChoices < 0 || portChoices > 64)
+        throw new Error(`${context} port choices is invalid`);
+    return portChoices > 1 && portLabel !== null ? portLabel.trim() : null;
 }
 
 function normalizeDefault(value) {

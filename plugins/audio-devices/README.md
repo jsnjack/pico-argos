@@ -5,8 +5,21 @@ microphone. Open its normal panel menu to switch either system default; the
 selected device has GNOME's native dot ornament.
 
 The plugin talks directly to the installed WirePlumber 0.5 GObject API. It
-does not poll, invoke `wpctl`, change volume or mute state, or alter individual
-application routing.
+does not poll, change volume or mute state, or alter individual application
+routing.
+
+The panel names only a class that offers a real choice. With exactly one output
+or one microphone that name is dropped and the icon carries the plugin, so a
+typical desktop shows an icon and at most one name.
+
+A card that exposes several ports for one device is named by its active port
+("Line Out", "Headphones"), because the connector is what distinguishes the
+alternatives. A card that exposes exactly one keeps its device name, which is
+the more specific identity there — an HDMI card reports the connected monitor,
+while its only port is always called "HDMI / DisplayPort". Port names come from
+`pw-dump`, run once per device change, because GJS cannot read WirePlumber's
+route parameters; without that binary every device falls back to its device
+name.
 
 ## Configuration
 
