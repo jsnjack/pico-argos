@@ -108,6 +108,7 @@ make check       # complete non-installing validation gate
 make test        # deterministic GJS unit and fixture tests
 make package     # build the extension zip
 make install     # explicitly install the local package
+make install_plugins  # copy reference plugins into the user's plugin root
 make standards   # refresh shared standards from jsnjack/standards
 ```
 

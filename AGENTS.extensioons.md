@@ -58,6 +58,12 @@ cp -R plugins/weather "$plugin_root/weather"
 chmod -R go-w "$plugin_root/weather"
 ```
 
+`make install_plugins` runs the equivalent copy for every reference plugin
+under [`plugins/`](./plugins/) in one step. It copies each plugin directory's
+contents into `$XDG_CONFIG_HOME/pico-argos/plugins/<plugin-id>/` without
+deleting the destination first, so a plugin-local `config.json` created at
+runtime survives repeated runs.
+
 The checked-in reference `run.js` files are executable and copied with that
 mode. Their manifests still use the specification's explicit
 `["gjs", "-m", "./run.js"]` argv. The registry creates the root when needed,

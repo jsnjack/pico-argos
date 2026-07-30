@@ -8,7 +8,7 @@ ESLINT := node_modules/.bin/eslint
 SCHEMAS := $(wildcard $(SRC_DIR)/schemas/*.gschema.xml)
 PACKAGE := $(DIST_DIR)/$(UUID).shell-extension.zip
 
-.PHONY: check spec-check format-check lint test schemas package package-check integration-test install standards clean
+.PHONY: check spec-check format-check lint test schemas package package-check integration-test install install_plugins standards clean
 
 check: spec-check format-check lint test package-check integration-test
 	@echo "==> make check: all green"
@@ -76,6 +76,18 @@ package: schemas
 
 install: package
 	@gnome-extensions install --force "$(DIST_DIR)/$(UUID).shell-extension.zip"
+
+install_plugins:
+	@plugin_root="$${XDG_CONFIG_HOME:-$$HOME/.config}/pico-argos/plugins"; \
+	install -d -m 700 "$$plugin_root"; \
+	for dir in plugins/*/; do \
+		[[ -f "$$dir/plugin.json" ]] || continue; \
+		id="$$(basename "$$dir")"; \
+		install -d -m 700 "$$plugin_root/$$id"; \
+		cp -R "$$dir." "$$plugin_root/$$id/"; \
+		chmod -R go-w "$$plugin_root/$$id"; \
+		echo "==> installed plugin: $$id"; \
+	done
 
 standards:
 	curl -sS --fail https://raw.githubusercontent.com/jsnjack/standards/master/AGENTS.universal.md -o AGENTS.universal.md
