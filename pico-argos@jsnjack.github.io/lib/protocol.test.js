@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import {MAX_MESSAGE_BYTES, parseProtocolMessage, ProtocolError} from './protocol.js';
+import {
+    encodeActionRequest,
+    MAX_MESSAGE_BYTES,
+    parseProtocolMessage,
+    ProtocolError,
+} from './protocol.js';
 
 function assertEqual(actual, expected, message) {
     if (JSON.stringify(actual) !== JSON.stringify(expected))
@@ -51,6 +56,69 @@ assertInvalid({version: 1, type: 'heartbeat', extra: true}, /unknown/, {
     allowHeartbeat: true,
 });
 assertInvalid({version: 2, type: 'snapshot', panel: null, menu: []}, /version/);
+const interactive = parseProtocolMessage(JSON.stringify({
+    version: 2,
+    type: 'snapshot',
+    panel: {text: 'Speakers · Microphone'},
+    menu: [
+        {id: 'output:44', kind: 'action', text: 'Speakers', selected: true},
+        {id: 'input:59', kind: 'action', text: 'Microphone', selected: false},
+    ],
+}), {protocolVersion: 2});
+assertEqual(interactive.snapshot.menu[0], {
+    id: 'output:44',
+    kind: 'action',
+    text: 'Speakers',
+    selected: true,
+}, 'interactive menu action');
+assertInvalid({
+    version: 1,
+    type: 'snapshot',
+    panel: null,
+    menu: [{id: 'action', kind: 'action', text: 'Switch', selected: false}],
+}, /version 2/);
+assertInvalid({
+    version: 2,
+    type: 'snapshot',
+    panel: null,
+    menu: [{id: 'action', kind: 'action', text: 'Switch'}],
+}, /selected/, {protocolVersion: 2});
+assertInvalid({
+    version: 2,
+    type: 'snapshot',
+    panel: null,
+    menu: [{id: 'x'.repeat(129), kind: 'action', text: 'Switch', selected: false}],
+}, /128/, {protocolVersion: 2});
+assertEqual(parseProtocolMessage(JSON.stringify({
+    version: 2,
+    type: 'action-result',
+    requestId: 7,
+    ok: true,
+}), {
+    protocolVersion: 2,
+    allowActionResult: true,
+}), {
+    kind: 'action-result',
+    requestId: 7,
+    ok: true,
+    message: null,
+}, 'action result');
+assertInvalid({
+    version: 2,
+    type: 'action-result',
+    requestId: 7,
+    ok: true,
+}, /execution mode/, {protocolVersion: 2});
+assertInvalid({
+    version: 2,
+    type: 'action-result',
+    requestId: 0,
+    ok: false,
+    message: 'failed',
+}, /requestId/, {protocolVersion: 2, allowActionResult: true});
+assertEqual(new TextDecoder().decode(encodeActionRequest('output:44', 7)),
+    '{"version":2,"type":"activate","id":"output:44","requestId":7}\n',
+    'encoded action request');
 assertInvalid({version: 1, type: 'snapshot', panel: null, menu: [], typo: true}, /unknown/);
 assertInvalid({version: 1, type: 'snapshot', panel: {visible: true}, menu: []}, /text or icon/);
 assertInvalid({version: 1, type: 'snapshot', panel: {icon: 'test-symbolic'}, menu: []}, /accessible/);

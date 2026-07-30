@@ -54,6 +54,8 @@ export class ExtensionController {
                 refreshOnOpen: pluginId => this._runtime?.refreshOnOpen(pluginId),
                 refreshNow: pluginId => this._runtime?.refreshNow(pluginId),
                 restartStream: pluginId => this._runtime?.restartStream(pluginId),
+                activateMenuAction: (pluginId, actionId) =>
+                    this._runtime?.activateMenuAction(pluginId, actionId),
                 openPreferences: () => this._extension.openPreferences(),
             });
         this._productionDiagnostics = new ProductionDiagnostics({

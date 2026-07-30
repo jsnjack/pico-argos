@@ -62,21 +62,23 @@ The implemented production flow and its retained Phase 0 instrumentation are:
 7. Stopped traces are encoded in bounded idle slices, written asynchronously
    below the XDG cache directory, and announced through `TraceReady`.
 8. `manifest.js`, `protocol.js`, and `state.js` provide the Shell-independent
-   version 1 validation and semantic no-op core used by the runtime.
+   version 1/2 validation and semantic no-op core used by the runtime.
 9. `PluginRegistry` asynchronously validates owned plugin trees, publishes an
    ordered initial set, and debounces atomic manifest/executable replacement.
 10. `OneShotScheduler` deterministically phases deadlines, coalesces bounded
     work, and serializes dispatch to `OneShotRunner`, which concurrently drains,
     limits, terminates, and reaps each direct child.
-11. `StreamRunner` incrementally frames UTF-8 lines and enforces liveness and
-    token buckets; `StreamSupervisor` serializes at most four child starts and
-    applies bounded exponential restart and lockout policy.
+11. `StreamRunner` incrementally frames UTF-8 lines, enforces liveness and
+    token buckets, and serializes bounded protocol-v2 stdin actions;
+    `StreamSupervisor` serializes at most four child starts and applies bounded
+    exponential restart and lockout policy.
 12. `RuntimeManager` joins both execution modes to `StateStore`, publishes only
     minimal changes, applies failure/staleness transitions, and rejects panel
     text that exceeds a manifest's reserved allocation.
 13. `RenderCoordinator` collapses each plugin to its latest presentation and
-    caps global batches at 10/s; `PluginIndicator` retains panel leaves and
-    creates keyed menu actors only on first open.
+    caps global batches at 10/s; `PluginIndicator` retains panel leaves,
+    creates keyed menu actors only on first open, and routes data-only action
+    IDs back to current interactive streams.
 14. `ExtensionController` wires the monitored registry, runtimes, renderer, and
     production diagnostic interface with generation-guarded teardown.
 15. `prefs.js` reads the live bounded summary only while its Diagnostics page
@@ -90,7 +92,8 @@ The production universal runtime flow is:
 1. `PluginRegistry` asynchronously discovers and validates plugin manifests.
 2. `RuntimeManager` schedules a bounded one-shot process or supervises a
    bounded persistent stream process.
-3. A runner frames, decodes, parses, and validates one protocol snapshot.
+3. A runner frames, decodes, parses, and validates one protocol message; an
+   interactive stream may also receive one bounded activation request.
 4. `StateStore` rejects raw and semantic no-ops and emits a minimal change set.
 5. `RenderCoordinator` coalesces changes and updates persistent leaf actors.
 6. `Diagnostics` records bounded phase timing without logging ordinary cycles.

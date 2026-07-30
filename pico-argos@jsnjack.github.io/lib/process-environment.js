@@ -4,7 +4,7 @@ import GLib from 'gi://GLib';
 
 const MINIMAL_PATH = '/usr/local/bin:/usr/bin:/bin';
 
-/** Builds the version 1 minimal environment for one plugin child. */
+/** Builds the minimal environment for one plugin child. */
 export function buildPluginEnvironment(manifest, menuOpen = null) {
     const values = new Map([
         ['HOME', GLib.get_home_dir()],
@@ -20,7 +20,7 @@ export function buildPluginEnvironment(manifest, menuOpen = null) {
             'state',
         ])],
         ['XDG_RUNTIME_DIR', GLib.get_user_runtime_dir() ?? ''],
-        ['PICO_ARGOS_PROTOCOL', '1'],
+        ['PICO_ARGOS_PROTOCOL', String(manifest.protocolVersion ?? 1)],
         ['PICO_ARGOS_PLUGIN_ID', manifest.id],
     ]);
     if (menuOpen !== null)

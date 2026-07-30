@@ -111,6 +111,17 @@ export class StreamSupervisor {
         return true;
     }
 
+    /** Forwards one menu activation only to a current running stream. */
+    activate(pluginId, actionId) {
+        const state = this._states.get(pluginId);
+        if (state === undefined ||
+            !this._started ||
+            !state.running ||
+            !this._isAdmitted(state))
+            return false;
+        return this._runner.activate(pluginId, actionId);
+    }
+
     /** Returns bounded health and concurrency state. */
     snapshot() {
         return {

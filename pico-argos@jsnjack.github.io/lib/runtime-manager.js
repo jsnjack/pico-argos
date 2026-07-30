@@ -189,6 +189,25 @@ export class RuntimeManager {
         return this._streamSupervisor.restart(pluginId);
     }
 
+    /** Activates one current, unselected protocol-v2 menu action. */
+    activateMenuAction(pluginId, actionId) {
+        const plugin = this._plugins.get(pluginId);
+        if (plugin?.manifest.mode !== 'stream' ||
+            plugin.manifest.protocolVersion !== 2)
+            return false;
+        const action = this._state.get(pluginId)?.menu.find(item =>
+            item.id === actionId && item.kind === 'action');
+        if (action === undefined || action.selected)
+            return false;
+        const accepted = this._streamSupervisor.activate(pluginId, actionId);
+        if (accepted) {
+            const health = this._health.get(pluginId);
+            health.actions++;
+            this._publishHealth(pluginId);
+        }
+        return accepted;
+    }
+
     /** Applies only coarse visual staleness transitions. */
     tickStaleness() {
         const nowUs = this._clock.nowUs();
@@ -256,6 +275,8 @@ export class RuntimeManager {
         try {
             processed = this._state.acceptProtocol(plugin.id, raw, {
                 allowHeartbeat: true,
+                allowActionResult: plugin.manifest.protocolVersion === 2,
+                protocolVersion: plugin.manifest.protocolVersion ?? 1,
                 validateSnapshot: snapshot => validateReservedText(plugin, snapshot),
                 observe,
             });
@@ -267,9 +288,25 @@ export class RuntimeManager {
         }
         if (processed.message.kind === 'snapshot') {
             this._acceptProcessed(plugin, processed.state, context);
-        } else {
+        } else if (processed.message.kind === 'heartbeat') {
             health.heartbeats++;
             health.lastHeartbeatUs = this._clock.nowUs();
+            this._publishHealth(plugin.id);
+        } else {
+            if (processed.message.ok)
+                health.actionSuccesses++;
+            else
+                health.actionFailures++;
+            this._onEvent?.({
+                runtime: 'state',
+                kind: 'action-result',
+                pluginId: plugin.id,
+                runId: context.runId ?? 0,
+                sequence: context.sequence ?? 0,
+                requestId: processed.message.requestId,
+                ok: processed.message.ok,
+                timestampUs: this._clock.nowUs(),
+            });
             this._publishHealth(plugin.id);
         }
         return processed.message;
@@ -506,6 +543,9 @@ function createHealth(plugin, nowUs) {
         restarts: 0,
         messages: 0,
         heartbeats: 0,
+        actions: 0,
+        actionSuccesses: 0,
+        actionFailures: 0,
         stdoutBytes: 0,
         stderrBytes: 0,
         lastChildRuntimeUs: null,

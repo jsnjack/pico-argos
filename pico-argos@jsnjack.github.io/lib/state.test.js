@@ -81,6 +81,30 @@ const cases = [
         assertEqual(result.changes.menu.updated, [{id: 'b', changes: {fields: {text: 'Changed'}}}], 'updated menu items');
         assertEqual(result.changes.menu.order, ['b', 'c'], 'menu order');
     }],
+    ['action selection changes update only the retained menu field', () => {
+        const parser = raw => ({kind: 'snapshot', snapshot: JSON.parse(raw)});
+        const store = new StateStore(parser);
+        const panel = {
+            visible: true,
+            text: 'Audio',
+            icon: null,
+            appearance: 'normal',
+            accessibleName: null,
+            severity: 'normal',
+        };
+        store.accept('audio', JSON.stringify({
+            panel,
+            menu: [{id: 'output:1', kind: 'action', text: 'Speakers', selected: false}],
+        }));
+        const result = store.accept('audio', JSON.stringify({
+            panel,
+            menu: [{id: 'output:1', kind: 'action', text: 'Speakers', selected: true}],
+        }));
+        assertEqual(result.changes.menu.updated, [{
+            id: 'output:1',
+            changes: {fields: {selected: true}},
+        }], 'selected action update');
+    }],
     ['failure and staleness policies transition only once', () => {
         const parser = raw => ({kind: 'snapshot', snapshot: JSON.parse(raw)});
         const store = new StateStore(parser);
@@ -129,6 +153,17 @@ const cases = [
         assertEqual(store.acceptProtocol('stream', raw, {allowHeartbeat: true}).state.kind,
             'raw-no-op', 'stream raw no-op');
         assertEqual(parses, 2, 'stream parse calls');
+    }],
+    ['action results bypass semantic state', () => {
+        const store = new StateStore(() => ({
+            kind: 'action-result',
+            requestId: 3,
+            ok: true,
+            message: null,
+        }));
+        const result = store.acceptProtocol('audio', 'result');
+        assertEqual(result.state, null, 'action result state');
+        assertEqual(store.get('audio'), null, 'action result retention');
     }],
     ['show-error can present before the first valid snapshot', () => {
         const store = new StateStore();

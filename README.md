@@ -29,6 +29,7 @@ outside the extension package:
 | Plugin | Purpose |
 |---|---|
 | [System monitor](./plugins/system-monitor/README.md) | CPU, GPU, memory, disk, and network activity |
+| [Audio devices](./plugins/audio-devices/README.md) | Current output/microphone and quick default-device switching |
 | [Dependabot](./plugins/dependabot/README.md) | GitHub dependency alerts |
 | [Pull reviews](./plugins/pull-reviews/README.md) | Requested GitHub reviews |
 | [VPN](./plugins/vpn/README.md) | VPN protection and location |

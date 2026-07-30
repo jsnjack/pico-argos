@@ -1,17 +1,18 @@
 {
-  "manifestVersion": 1,
-  "id": "system-monitor",
+  "manifestVersion": 2,
+  "protocolVersion": 2,
+  "id": "audio-devices",
   "mode": "stream",
   "command": ["gjs", "-m", "./run.js"],
-  "startupTimeoutMs": 2000,
-  "heartbeatTimeoutMs": 5000,
+  "startupTimeoutMs": 5000,
+  "heartbeatTimeoutMs": 15000,
   "maxMessagesPerSecond": 5,
   "maxBytesPerMinute": 262144,
-  "position": "left",
-  "order": 0,
+  "position": "right",
+  "order": 40,
   "nice": 10,
   "reserveTextChars": 0,
   "passEnvironment": [],
   "failurePolicy": "show-error",
-  "maxStaleMs": 10000
+  "maxStaleMs": 30000
 }

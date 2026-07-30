@@ -2,8 +2,9 @@
 
 import GLib from 'gi://GLib';
 
-/** Manifest version accepted by this extension release. */
-export const MANIFEST_VERSION = 1;
+/** Latest manifest version accepted by this extension release. */
+export const MANIFEST_VERSION = 2;
+export const LEGACY_MANIFEST_VERSION = 1;
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const ENVIRONMENT_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -37,6 +38,7 @@ const COMMON_KEYS = new Set([
     'failurePolicy',
     'maxStaleMs',
 ]);
+const V2_KEYS = new Set(['protocolVersion']);
 const ONESHOT_KEYS = new Set(['intervalMs', 'timeoutMs', 'refreshOnOpen']);
 const STREAM_KEYS = new Set([
     'startupTimeoutMs',
@@ -45,7 +47,7 @@ const STREAM_KEYS = new Set([
     'maxBytesPerMinute',
 ]);
 
-/** Describes an invalid version 1 plugin manifest. */
+/** Describes an invalid plugin manifest. */
 export class ManifestError extends Error {
     constructor(message) {
         super(message);
@@ -67,8 +69,9 @@ export function parseManifest(raw, pluginDirectory, directoryId) {
 /** Validates and normalizes one parsed plugin manifest. */
 export function validateManifest(value, pluginDirectory, directoryId) {
     requireObject(value, 'Manifest');
-    if (value.manifestVersion !== MANIFEST_VERSION)
-        throw new ManifestError(`Manifest version must equal ${MANIFEST_VERSION}`);
+    if (value.manifestVersion !== LEGACY_MANIFEST_VERSION &&
+        value.manifestVersion !== MANIFEST_VERSION)
+        throw new ManifestError('Manifest version must equal 1 or 2');
     if (typeof value.id !== 'string' || !ID_PATTERN.test(value.id))
         throw new ManifestError('Manifest ID is invalid');
     if (value.id !== directoryId)
@@ -77,6 +80,10 @@ export function validateManifest(value, pluginDirectory, directoryId) {
         throw new ManifestError('Manifest mode must be oneshot or stream');
 
     const allowedKeys = new Set(COMMON_KEYS);
+    if (value.manifestVersion === MANIFEST_VERSION) {
+        for (const key of V2_KEYS)
+            allowedKeys.add(key);
+    }
     const modeKeys = value.mode === 'oneshot' ? ONESHOT_KEYS : STREAM_KEYS;
     for (const key of modeKeys)
         allowedKeys.add(key);
@@ -99,9 +106,11 @@ export function validateManifest(value, pluginDirectory, directoryId) {
     if (!FAILURE_POLICIES.has(value.failurePolicy))
         throw new ManifestError('Manifest failurePolicy is invalid');
     const maxStaleMs = validateMaxStale(value.maxStaleMs);
+    const protocolVersion = validateProtocolVersion(value);
 
     const normalized = {
-        manifestVersion: MANIFEST_VERSION,
+        manifestVersion: value.manifestVersion,
+        protocolVersion,
         id: value.id,
         mode: value.mode,
         command,
@@ -219,6 +228,16 @@ function validateStream(value) {
         maxMessagesPerSecond,
         maxBytesPerMinute,
     };
+}
+
+function validateProtocolVersion(value) {
+    if (value.manifestVersion === LEGACY_MANIFEST_VERSION)
+        return 1;
+    if (value.mode !== 'stream')
+        throw new ManifestError('Manifest version 2 is only valid for stream plugins');
+    if (value.protocolVersion !== 2)
+        throw new ManifestError('Manifest protocolVersion must equal 2');
+    return value.protocolVersion;
 }
 
 function requireObject(value, context) {

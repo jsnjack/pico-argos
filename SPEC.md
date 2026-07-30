@@ -517,7 +517,9 @@ Example:
 
 Manifest rules:
 
-- `manifestVersion` MUST equal `1`.
+- `manifestVersion` MUST equal `1` or `2`. Version 1 remains the
+  non-interactive contract. Version 2 is accepted only for `stream` plugins and
+  MUST include `"protocolVersion": 2`; version 1 rejects that field.
 - `id` MUST match `[a-z0-9][a-z0-9._-]{0,63}` and the directory name.
 - `mode` MUST be `oneshot` or `stream`.
 - `command` MUST be a non-empty argv array. No shell splitting is performed.
@@ -536,6 +538,8 @@ Manifest rules:
   1,048,576. One-shot-only fields are rejected.
 - `position` is `left`, `center`, or `right`.
 - `order` is an integer. Ordering is `(position, order, id)`.
+- Left-positioned plugin indicators follow the Shell's built-in left-side
+  controls, preserving Activities as the leading panel item.
 - `nice` is `null` or an integer from 0 through 19 and defaults to `10`.
   `null` disables the niceness wrapper. If the host cannot apply the requested
   niceness, the process still runs and diagnostics record that mitigation as
@@ -553,13 +557,13 @@ Manifest rules:
 - `maxStaleMs` is a positive integer no larger than 604,800,000, or `null` to
   disable visual staleness. For one-shot plugins it MUST be at least
   `intervalMs`.
-- Unknown manifest keys are rejected in version 1 to catch misspellings.
+- Unknown manifest keys are rejected in both versions to catch misspellings.
 
 The child receives a minimal environment containing `HOME`, `PATH`, `LANG`,
 `LC_ALL`, the XDG directory variables, allowlisted variables, and:
 
 ```text
-PICO_ARGOS_PROTOCOL=1
+PICO_ARGOS_PROTOCOL=<manifest protocol version>
 PICO_ARGOS_MENU_OPEN=true|false  # one-shot only
 PICO_ARGOS_PLUGIN_ID=<id>
 ```
@@ -598,7 +602,7 @@ Example:
 
 Top-level rules:
 
-- `version` MUST equal `1`.
+- `version` MUST equal the manifest's protocol version.
 - `type` MUST equal `snapshot` for visible state.
 - `panel` is an object or `null`. `null` hides the indicator.
 - `menu` is an array with at most 64 entries.
@@ -629,6 +633,7 @@ Menu entries have stable unique IDs and one of these forms:
 {"id":"country","kind":"label","text":"Connected to NL"}
 {"id":"sep-1","kind":"separator"}
 {"id":"reviews","kind":"link","text":"Review requested","uri":"https://github.com/pulls/review-requested"}
+{"id":"output:44","kind":"action","text":"Speakers","selected":true}
 ```
 
 Menu rules:
@@ -641,8 +646,13 @@ Menu rules:
 - URIs are at most 2,048 UTF-8 bytes and must parse successfully with `GLib.Uri`.
 - Links are opened with `Gio.AppInfo.launch_default_for_uri()`.
 - Labels are not interactive.
+- `action` is accepted only in protocol version 2. Its ID is at most 128
+  Unicode scalar values, `text` follows the label limit, and `selected` is
+  boolean. The selected row uses the Shell's native dot ornament and is not
+  reactive.
 - Empty labels are rejected; separators represent visual grouping.
-- Plugins cannot provide callbacks, JavaScript, shell commands, CSS, or markup.
+- Plugins cannot provide callbacks, payloads, JavaScript, shell commands, CSS,
+  or markup.
 
 A stream may also emit a heartbeat:
 
@@ -665,6 +675,35 @@ each complete line costs one token. The byte bucket capacity equals
 second; every stdout byte costs one token as it is read. Fractional tokens are
 allowed, and elapsed time is monotonic. Limits are checked before parsing a
 complete line.
+
+### 8.3.1 Interactive stream input
+
+Protocol version 2 adds one generic activation channel to a stream child's
+stdin. Version 1 children receive no stdin pipe. When a current unselected
+action is activated, the core writes exactly:
+
+```json
+{"version":2,"type":"activate","id":"output:44","requestId":7}
+```
+
+The object contains no other fields and ends with one newline. `id` MUST match
+an action in the plugin's latest valid snapshot. `requestId` is a positive
+integer no larger than 2,147,483,647. The core permits at most one pending
+request per plugin and at most four accepted requests per second. A removed,
+replaced, stopped, selected, or stale action is rejected without writing.
+
+The plugin responds on stdout with:
+
+```json
+{"version":2,"type":"action-result","requestId":7,"ok":true}
+```
+
+`requestId` MUST match the pending request. `ok` is boolean and `message` is
+optional plain text of at most 512 Unicode scalars. An unexpected result,
+stdin write failure, or missing result after two seconds fails the stream and
+enters normal restart policy. Action results do not enter `StateStore` or
+directly mutate UI. After handling an action, the plugin emits an authoritative
+snapshot; its semantic diff updates selection and visible state.
 
 ### 8.4 Failure Semantics
 
@@ -731,6 +770,9 @@ Subprocess requirements:
   guarantee termination of an independently running grandchild.
 - A disabled or removed plugin cancels its timer, reads, and direct child.
 - Completion after disable may update diagnostics but MUST NOT touch actors.
+- Protocol version 2 stream stdin uses asynchronous bounded writes. It retains
+  no action queue beyond one pending request, closes with the child lifecycle,
+  and never interprets action IDs as commands or payloads.
 
 For stream plugins, stdout is decoded incrementally with one persistent decoder
 so a multibyte UTF-8 sequence may cross read boundaries. Complete lines are
@@ -823,7 +865,8 @@ for periodic data changes.
 - Opening applies the latest snapshot before display.
 - Opening never waits for a `refreshOnOpen` execution. It displays the cached
   valid snapshot immediately and applies the eventual result asynchronously.
-- While open, item text, URI, visibility, and severity are updated in place.
+- While open, item text, URI, selection ornament, reactivity, visibility, and
+  severity are updated in place.
 - Reordering moves existing actors; it does not recreate them.
 - Removed item actors are destroyed only when the semantic item is actually
   removed.
@@ -1100,7 +1143,24 @@ The migrated script invokes `jq` once to transform the response directly into
 the protocol document. Blank output lines are replaced by explicit separator
 items. Images and markup are unnecessary.
 
-### 13.6 Reference Plugin Rules
+### 13.6 Audio devices
+
+Required behavior:
+
+- Run as an event-driven protocol version 2 stream.
+- Show the current system-default output and microphone in one compact panel
+  item.
+- List bounded Output and Microphone action rows in the plugin menu with native
+  selected-row ornaments.
+- Switch only the system defaults. Volume, mute, profiles, ports, and
+  per-application routing are outside this plugin.
+- React to WirePlumber default changes and PipeWire device hotplug without
+  polling or recurring child processes.
+
+The reference plugin uses the installed WirePlumber 0.5 GObject API and keeps
+all audio-domain logic outside the extension.
+
+### 13.7 Reference Plugin Rules
 
 Migrated network scripts MUST:
 
@@ -1170,6 +1230,8 @@ Pure modules are tested outside GNOME Shell with GJS:
 - scheduler deadlines, skips, resume behavior, and refresh-on-open coalescing
 - stream framing, UTF-8 boundary handling, rate budgets, liveness, restart
   backoff, and failed-start lockout
+- protocol-v2 action validation, one-pending/rate bounds, correlated results,
+  stale action rejection, action timeout, and stdin teardown
 - failure policies and staleness transitions
 - histogram and trace-ring bounds
 
@@ -1210,6 +1272,8 @@ Mutation counters are assertions:
   plugin content has ever arrived, proving its box is never empty.
 - Reopening an unchanged menu produces no mutation.
 - Updating one menu label changes one existing label property.
+- Changing selected actions updates retained ornaments and reactivity without
+  recreating actors; only an unselected row dispatches activation.
 - Adding/removing one plugin does not mutate other plugins.
 
 ### 17.4 GNOME Integration
@@ -1348,6 +1412,7 @@ investigation back to Mutter/amdgpu repaint behavior.
 - Default 250-ms CPU/GPU/network sampling and freshness acceptance measurements
 - Combined fixed-width system indicator output
 - Dependabot, pull-request, VPN, and weather one-shot plugins
+- Event-driven WirePlumber audio-device stream with default switching
 - Reference plugin parser and protocol tests
 - One-hour stability and frame-latency run
 

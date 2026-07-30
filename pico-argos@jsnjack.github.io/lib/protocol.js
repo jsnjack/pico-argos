@@ -4,12 +4,15 @@ import GLib from 'gi://GLib';
 
 /** Protocol version accepted by this extension release. */
 export const PROTOCOL_VERSION = 1;
+export const INTERACTIVE_PROTOCOL_VERSION = 2;
 
 /** Maximum encoded size of one protocol message. */
 export const MAX_MESSAGE_BYTES = 64 * 1_024;
 
 const TOP_LEVEL_KEYS = new Set(['version', 'type', 'panel', 'menu']);
 const HEARTBEAT_KEYS = new Set(['version', 'type']);
+const ACTION_RESULT_KEYS = new Set(['version', 'type', 'requestId', 'ok', 'message']);
+const ACTION_REQUEST_KEYS = new Set(['version', 'type', 'id', 'requestId']);
 const PANEL_KEYS = new Set([
     'visible',
     'text',
@@ -21,11 +24,12 @@ const PANEL_KEYS = new Set([
 const MENU_COMMON_KEYS = new Set(['id', 'kind']);
 const MENU_TEXT_KEYS = new Set(['id', 'kind', 'text']);
 const MENU_LINK_KEYS = new Set(['id', 'kind', 'text', 'uri']);
+const MENU_ACTION_KEYS = new Set(['id', 'kind', 'text', 'selected']);
 const ICON_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const APPEARANCES = new Set(['accent', 'compact', 'monospace', 'normal']);
 const SEVERITIES = new Set(['normal', 'warning', 'critical']);
 
-/** Describes invalid JSON or a version 1 protocol schema violation. */
+/** Describes invalid JSON or a protocol schema violation. */
 export class ProtocolError extends Error {
     constructor(message) {
         super(message);
@@ -34,7 +38,7 @@ export class ProtocolError extends Error {
     }
 }
 
-/** Parses and validates one bounded snapshot or heartbeat message. */
+/** Parses and validates one bounded plugin-to-core protocol message. */
 export function parseProtocolMessage(raw, options = {}) {
     if (typeof raw !== 'string')
         throw new ProtocolError('Protocol message must be decoded UTF-8 text');
@@ -48,7 +52,11 @@ export function parseProtocolMessage(raw, options = {}) {
         throw new ProtocolError(`Invalid protocol JSON: ${error.message}`);
     }
     requirePlainObject(value, 'Protocol message');
-    requireExact(value.version, PROTOCOL_VERSION, 'Protocol version');
+    const protocolVersion = options.protocolVersion ?? PROTOCOL_VERSION;
+    if (protocolVersion !== PROTOCOL_VERSION &&
+        protocolVersion !== INTERACTIVE_PROTOCOL_VERSION)
+        throw new ProtocolError('Expected protocol version is unsupported');
+    requireExact(value.version, protocolVersion, 'Protocol version');
 
     if (value.type === 'heartbeat') {
         if (!options.allowHeartbeat)
@@ -56,8 +64,25 @@ export function parseProtocolMessage(raw, options = {}) {
         rejectUnknownKeys(value, HEARTBEAT_KEYS, 'Heartbeat');
         return Object.freeze({kind: 'heartbeat'});
     }
+    if (value.type === 'action-result') {
+        if (protocolVersion !== INTERACTIVE_PROTOCOL_VERSION ||
+            !options.allowActionResult)
+            throw new ProtocolError('Action result is not valid in this execution mode');
+        rejectUnknownKeys(value, ACTION_RESULT_KEYS, 'Action result');
+        validateRequestId(value.requestId, 'Action result requestId');
+        requireBoolean(value.ok, 'Action result ok');
+        const message = value.message ?? null;
+        if (message !== null)
+            validateText(message, 512, 'Action result message');
+        return Object.freeze({
+            kind: 'action-result',
+            requestId: value.requestId,
+            ok: value.ok,
+            message,
+        });
+    }
     if (value.type !== 'snapshot')
-        throw new ProtocolError('Protocol type must be snapshot or heartbeat');
+        throw new ProtocolError('Protocol type is invalid');
 
     rejectUnknownKeys(value, TOP_LEVEL_KEYS, 'Snapshot');
     if (!Object.hasOwn(value, 'panel'))
@@ -69,7 +94,7 @@ export function parseProtocolMessage(raw, options = {}) {
 
     const snapshot = {
         panel: validatePanel(value.panel),
-        menu: validateMenu(value.menu),
+        menu: validateMenu(value.menu, protocolVersion),
     };
     freezeSnapshot(snapshot);
     return Object.freeze({kind: 'snapshot', snapshot});
@@ -111,7 +136,7 @@ function validatePanel(value) {
     return {visible, text, icon, appearance, accessibleName, severity};
 }
 
-function validateMenu(values) {
+function validateMenu(values, protocolVersion) {
     const ids = new Set();
     return values.map((value, index) => {
         const context = `Menu entry ${index}`;
@@ -142,8 +167,41 @@ function validateMenu(values) {
             validateHttpsUri(value.uri, context);
             return {id: value.id, kind: 'link', text: value.text, uri: value.uri};
         }
+        if (value.kind === 'action') {
+            if (protocolVersion !== INTERACTIVE_PROTOCOL_VERSION)
+                throw new ProtocolError(`${context} action requires protocol version 2`);
+            rejectUnknownKeys(value, MENU_ACTION_KEYS, context);
+            validateText(value.text, 512, `${context} text`);
+            if (value.text.length === 0)
+                throw new ProtocolError(`${context} action text is empty`);
+            requireBoolean(value.selected, `${context} selected`);
+            if (unicodeScalarCount(value.id) > 128)
+                throw new ProtocolError(`${context} action ID exceeds 128 Unicode scalars`);
+            return {
+                id: value.id,
+                kind: 'action',
+                text: value.text,
+                selected: value.selected,
+            };
+        }
         throw new ProtocolError(`${context} kind is invalid`);
     });
+}
+
+/** Encodes one validated core-to-plugin activation request and trailing newline. */
+export function encodeActionRequest(id, requestId) {
+    validateText(id, 128, 'Action request ID');
+    if (id.length === 0)
+        throw new ProtocolError('Action request ID is empty');
+    validateRequestId(requestId, 'Action request requestId');
+    const value = {
+        version: INTERACTIVE_PROTOCOL_VERSION,
+        type: 'activate',
+        id,
+        requestId,
+    };
+    rejectUnknownKeys(value, ACTION_REQUEST_KEYS, 'Action request');
+    return new TextEncoder().encode(`${JSON.stringify(value)}\n`);
 }
 
 function validateHttpsUri(value, context) {
@@ -209,6 +267,11 @@ function requirePlainObject(value, context) {
 function requireBoolean(value, context) {
     if (typeof value !== 'boolean')
         throw new ProtocolError(`${context} must be boolean`);
+}
+
+function validateRequestId(value, context) {
+    if (!Number.isInteger(value) || value < 1 || value > 2_147_483_647)
+        throw new ProtocolError(`${context} must be an integer from 1 through 2147483647`);
 }
 
 function requireExact(actual, expected, context) {

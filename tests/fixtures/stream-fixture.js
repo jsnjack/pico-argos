@@ -84,6 +84,78 @@ switch (ARGV[0]) {
         write(stdout, snapshot);
         GLib.usleep(2_000_000);
         break;
+    case 'interactive': {
+        const loop = GLib.MainLoop.new(null, false);
+        const stdin = GioUnix.InputStream.new(0, false);
+        const input = new Gio.DataInputStream({base_stream: stdin});
+        write(stdout, `${JSON.stringify({
+            version: 2,
+            type: 'snapshot',
+            panel: {text: 'Speakers · Microphone'},
+            menu: [{
+                id: 'output:44',
+                kind: 'action',
+                text: 'Speakers',
+                selected: false,
+            }],
+        })}\n`);
+        const read = () => input.read_line_async(
+            GLib.PRIORITY_DEFAULT,
+            null,
+            (source, result) => {
+                const [line] = source.read_line_finish(result);
+                if (line === null) {
+                    loop.quit();
+                    return;
+                }
+                const request = JSON.parse(new TextDecoder().decode(line));
+                write(stdout, `${JSON.stringify({
+                    version: 2,
+                    type: 'action-result',
+                    requestId: request.requestId,
+                    ok: true,
+                })}\n`);
+                write(stdout, `${JSON.stringify({
+                    version: 2,
+                    type: 'snapshot',
+                    panel: {text: 'Speakers · Microphone'},
+                    menu: [{
+                        id: 'output:44',
+                        kind: 'action',
+                        text: 'Speakers',
+                        selected: true,
+                    }],
+                })}\n`);
+                read();
+            });
+        read();
+        loop.run();
+        break;
+    }
+    case 'interactive-no-result': {
+        const loop = GLib.MainLoop.new(null, false);
+        const stdin = GioUnix.InputStream.new(0, false);
+        const input = new Gio.DataInputStream({base_stream: stdin});
+        write(stdout, `${JSON.stringify({
+            version: 2,
+            type: 'snapshot',
+            panel: {text: 'Audio'},
+            menu: [{
+                id: 'output:44',
+                kind: 'action',
+                text: 'Speakers',
+                selected: false,
+            }],
+        })}\n`);
+        input.read_line_async(
+            GLib.PRIORITY_DEFAULT,
+            null,
+            (source, result) => {
+                source.read_line_finish(result);
+            });
+        loop.run();
+        break;
+    }
     default:
         throw new Error(`Unknown fixture mode: ${ARGV[0]}`);
 }

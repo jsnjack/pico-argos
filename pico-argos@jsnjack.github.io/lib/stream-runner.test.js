@@ -119,4 +119,79 @@ try {
     if (!(error instanceof StreamRunError) || error.kind !== 'cancelled')
         throw error;
 }
+
+const interactiveMessages = [];
+const interactiveRun = runner.run(manifest('interactive', {
+    id: 'interactive-stream',
+    protocolVersion: 2,
+    maxMessagesPerSecond: 4,
+}), {
+    onMessage: raw => {
+        const message = parseProtocolMessage(raw, {
+            allowHeartbeat: true,
+            allowActionResult: true,
+            protocolVersion: 2,
+        });
+        interactiveMessages.push(message);
+        return message;
+    },
+});
+while (!interactiveMessages.some(message => message.kind === 'snapshot'))
+    await new Promise(resolve => GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+        resolve();
+        return GLib.SOURCE_REMOVE;
+    }));
+if (!runner.activate('interactive-stream', 'output:44'))
+    throw new Error('Healthy interactive stream rejected an action');
+if (runner.activate('interactive-stream', 'output:44'))
+    throw new Error('Interactive stream accepted more than one pending action');
+while (!interactiveMessages.some(message => message.kind === 'action-result'))
+    await new Promise(resolve => GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+        resolve();
+        return GLib.SOURCE_REMOVE;
+    }));
+if (runner.activate('interactive-stream', 'output:44'))
+    throw new Error('Interactive stream bypassed its per-plugin action rate');
+if (!interactiveMessages.some(message =>
+    message.kind === 'snapshot' &&
+    message.snapshot.menu[0].selected))
+    throw new Error('Interactive stream did not publish authoritative selection');
+runner.cancel('interactive-stream');
+try {
+    await interactiveRun;
+    throw new Error('Cancelled interactive stream unexpectedly completed');
+} catch (error) {
+    if (!(error instanceof StreamRunError) || error.kind !== 'cancelled')
+        throw error;
+}
+
+let noResultStarted = false;
+const noResultRun = runner.run(manifest('interactive-no-result', {
+    id: 'interactive-no-result',
+    protocolVersion: 2,
+}), {
+    onMessage: raw => {
+        const message = parseProtocolMessage(raw, {
+            allowHeartbeat: true,
+            allowActionResult: true,
+            protocolVersion: 2,
+        });
+        noResultStarted ||= message.kind === 'snapshot';
+        return message;
+    },
+});
+while (!noResultStarted)
+    await new Promise(resolve => GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+        resolve();
+        return GLib.SOURCE_REMOVE;
+    }));
+if (!runner.activate('interactive-no-result', 'output:44'))
+    throw new Error('No-result fixture rejected its initial action');
+try {
+    await noResultRun;
+    throw new Error('Unacknowledged action unexpectedly kept its stream alive');
+} catch (error) {
+    if (!(error instanceof StreamRunError) || error.kind !== 'action-timeout')
+        throw error;
+}
 print('ok - stream runner supervises framing, liveness, rates, and cancellation');

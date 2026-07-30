@@ -259,6 +259,11 @@ export class PluginIndicator {
                 }
                 if (model.kind === 'link' && entry.model.uri !== model.uri)
                     this._recordMenuWrite();
+                if (model.kind === 'action' &&
+                    entry.model.selected !== model.selected) {
+                    this._applyActionState(entry.item, model.selected);
+                    this._recordMenuWrite();
+                }
                 entry.model = model;
             }
         });
@@ -333,8 +338,10 @@ export class PluginIndicator {
             item = new PopupMenu.PopupSeparatorMenuItem();
         } else {
             item = new PopupMenu.PopupMenuItem(model.text, {
-                reactive: model.kind === 'link',
-                can_focus: model.kind === 'link',
+                reactive: model.kind === 'link' ||
+                    (model.kind === 'action' && !model.selected),
+                can_focus: model.kind === 'link' ||
+                    (model.kind === 'action' && !model.selected),
             });
             if (model.kind === 'link') {
                 signalId = item.connect('activate', () => {
@@ -349,6 +356,16 @@ export class PluginIndicator {
                             `(${error.domain ?? 'unknown'}:${error.code ?? 'unknown'})`);
                     }
                 });
+            } else if (model.kind === 'action') {
+                this._applyActionState(item, model.selected);
+                signalId = item.connect('activate', () => {
+                    const current = this._menuEntries.get(model.id)?.model;
+                    if (current?.kind !== 'action' || current.selected)
+                        return;
+                    this._actions.activateMenuAction(
+                        this.plugin.id,
+                        current.id);
+                });
             }
         }
         this._recordCreation();
@@ -356,6 +373,14 @@ export class PluginIndicator {
         this._menuEntries.set(model.id, entry);
         this.actor.menu.addMenuItem(item, index);
         return entry;
+    }
+
+    _applyActionState(item, selected) {
+        item.reactive = !selected;
+        item.can_focus = !selected;
+        item.setOrnament(selected
+            ? PopupMenu.Ornament.DOT
+            : PopupMenu.Ornament.NONE);
     }
 
     _destroyEntry(id, entry) {
@@ -491,6 +516,8 @@ export class ProductionRenderer {
     }
 
     _positionIndex(plugin) {
+        if (plugin.manifest.position === 'left')
+            return panelBox('left').get_n_children();
         return [...this._entries.values()]
             .filter(entry => entry.plugin.manifest.position === plugin.manifest.position)
             .sort((left, right) => compareManifests(left.plugin.manifest, right.plugin.manifest))

@@ -41,11 +41,14 @@ export default class ActorHarnessExtension extends Extension {
     _runAssertions() {
         this._diagnostics = new Diagnostics();
         let useExplicitPanelRedraw = true;
+        const activations = [];
         const actions = {
             useExplicitPanelRedraw: () => useExplicitPanelRedraw,
             refreshOnOpen() {},
             refreshNow() {},
             restartStream() {},
+            activateMenuAction: (pluginId, actionId) =>
+                activations.push([pluginId, actionId]),
             openPreferences() {},
         };
         const plugin = fixturePlugin('actor-primary', 10);
@@ -143,9 +146,35 @@ export default class ActorHarnessExtension extends Extension {
             beforeLabelUpdate['menu-property-writes'] + 1,
         'Updating one menu label did not perform exactly one menu write');
 
+        const actionMenu = [
+            {id: 'output:44', kind: 'action', text: 'Speakers', selected: false},
+            {id: 'output:45', kind: 'action', text: 'Headphones', selected: true},
+        ];
+        this._indicator.applyPresentation(presentation('09999', actionMenu));
+        const firstAction = this._indicator._menuEntries.get('output:44').item;
+        const selectedAction = this._indicator._menuEntries.get('output:45').item;
+        assert(firstAction.reactive && firstAction.can_focus,
+            'Unselected action is not keyboard and pointer interactive');
+        assert(!selectedAction.reactive && !selectedAction.can_focus,
+            'Selected action remained interactive');
+        firstAction.emit('activate', null);
+        selectedAction.emit('activate', null);
+        assert(JSON.stringify(activations) ===
+            JSON.stringify([['actor-primary', 'output:44']]),
+        'Menu actions did not dispatch exactly one unselected activation');
+        const beforeSelection = mutations(this._diagnostics);
+        this._indicator.applyPresentation(presentation('09999', [
+            {...actionMenu[0], selected: true},
+            {...actionMenu[1], selected: false},
+        ]));
+        const afterSelection = mutations(this._diagnostics);
+        assert(afterSelection['actor-creations'] === beforeSelection['actor-creations'] &&
+            afterSelection['actor-destructions'] === beforeSelection['actor-destructions'],
+        'Changing action selection recreated a menu actor');
+
         const beforeReorder = mutations(this._diagnostics);
         this._indicator.applyPresentation(
-            presentation('09999', [...updatedMenu].reverse()));
+            presentation('09999', [...actionMenu].reverse()));
         const afterReorder = mutations(this._diagnostics);
         assert(afterReorder['actor-creations'] === beforeReorder['actor-creations'] &&
             afterReorder['actor-destructions'] === beforeReorder['actor-destructions'],
@@ -166,7 +195,7 @@ export default class ActorHarnessExtension extends Extension {
         delete Main.panel.statusArea[`${TEST_ROLE}-secondary`];
         const beforeUnrelatedApply = mutations(this._diagnostics);
         this._indicator.applyPresentation(
-            presentation('09999', [...updatedMenu].reverse()));
+            presentation('09999', [...actionMenu].reverse()));
         assertMutationsEqual(
             mutations(this._diagnostics),
             beforeUnrelatedApply,

@@ -50,6 +50,7 @@ const normalizedOneShot = validateManifest(oneShot, '/tmp/plugins/test', 'test')
 assertEqual(normalizedOneShot.command[0], '/tmp/plugins/test/run', 'resolved executable');
 assertEqual(normalizedOneShot.nice, 10, 'default niceness');
 assertEqual(normalizedOneShot.reserveTextChars, 0, 'default reservation');
+assertEqual(normalizedOneShot.protocolVersion, 1, 'legacy protocol default');
 if (!Object.isFrozen(normalizedOneShot) || !Object.isFrozen(normalizedOneShot.command))
     throw new Error('Normalized manifest must be immutable');
 
@@ -60,7 +61,9 @@ assertEqual(normalizedStream.maxMessagesPerSecond, 2, 'message default');
 assertEqual(normalizedStream.maxBytesPerMinute, 262_144, 'byte default');
 
 assertInvalid({id: 'other'}, /directory/);
-assertInvalid({manifestVersion: 2}, /version/);
+assertInvalid({manifestVersion: 3}, /version/);
+assertInvalid({manifestVersion: 2}, /only valid for stream/);
+assertInvalid({protocolVersion: 2}, /unknown/);
 assertInvalid({id: 'Invalid'}, /ID/);
 assertInvalid({command: ['../escape']}, /escapes/);
 assertInvalid({command: []}, /1 through 32/);
@@ -92,6 +95,15 @@ assertInvalid({maxMessagesPerSecond: 0}, /1 through 10/, 'stream');
 assertInvalid({maxMessagesPerSecond: 11}, /1 through 10/, 'stream');
 assertInvalid({maxBytesPerMinute: 65_535}, /65536/, 'stream');
 assertInvalid({maxBytesPerMinute: 1_048_577}, /1048576/, 'stream');
+
+const interactiveStream = validateManifest({
+    ...stream,
+    manifestVersion: 2,
+    protocolVersion: 2,
+}, '/tmp/plugins/test', 'test');
+assertEqual(interactiveStream.protocolVersion, 2, 'interactive protocol version');
+assertInvalid({manifestVersion: 2}, /protocolVersion/, 'stream');
+assertInvalid({manifestVersion: 2, protocolVersion: 1}, /protocolVersion/, 'stream');
 
 const ordered = [
     {...normalizedOneShot, id: 'z', position: 'right', order: 1},

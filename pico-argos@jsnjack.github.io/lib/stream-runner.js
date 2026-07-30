@@ -4,12 +4,18 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {buildPluginEnvironment} from './process-environment.js';
-import {parseProtocolMessage} from './protocol.js';
+import {
+    encodeActionRequest,
+    INTERACTIVE_PROTOCOL_VERSION,
+    parseProtocolMessage,
+} from './protocol.js';
 import {StreamFramer, StreamStderr} from './stream-framing.js';
 
 const READ_BYTES = 8 * 1_024;
 const TERMINATE_GRACE_MS = 250;
 const PIPE_DRAIN_MS = 250;
+const ACTION_TIMEOUT_MS = 2_000;
+const ACTION_INTERVAL_US = 250_000;
 
 /** Describes one supervised stream child failure. */
 export class StreamRunError extends Error {
@@ -49,9 +55,12 @@ export class StreamRunner {
 
         const runId = this._nextRunId();
         const cancellable = new Gio.Cancellable();
-        const launcher = new Gio.SubprocessLauncher({
-            flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
-        });
+        const interactive =
+            manifest.protocolVersion === INTERACTIVE_PROTOCOL_VERSION;
+        let flags = Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE;
+        if (interactive)
+            flags |= Gio.SubprocessFlags.STDIN_PIPE;
+        const launcher = new Gio.SubprocessLauncher({flags});
         launcher.set_environ(buildPluginEnvironment(manifest));
         launcher.set_cwd(workingDirectory ?? GLib.path_get_dirname(manifest.command[0]));
         const argv = manifest.nice === null || this._nicePath === null
@@ -99,6 +108,11 @@ export class StreamRunner {
             stdoutBytes: 0,
             stderrBytes: 0,
             messageSequence: 0,
+            stdin: interactive ? process.get_stdin_pipe() : null,
+            nextRequestId: 0,
+            pendingAction: null,
+            actionSourceId: 0,
+            lastActionUs: Number.NEGATIVE_INFINITY,
         };
         this._active.set(manifest.id, context);
         context.startupSourceId = GLib.timeout_add(
@@ -157,12 +171,18 @@ export class StreamRunner {
                         this._clock.nowUs(),
                         context.messageSequence);
                     const message = onMessage === null
-                        ? parseProtocolMessage(raw, {allowHeartbeat: true})
+                        ? parseProtocolMessage(raw, {
+                            allowHeartbeat: true,
+                            allowActionResult: interactive,
+                            protocolVersion: manifest.protocolVersion ?? 1,
+                        })
                         : onMessage(raw, {
                             runId,
                             sequence: context.messageSequence,
                         });
-                    if (message?.kind !== 'snapshot' && message?.kind !== 'heartbeat')
+                    if (message?.kind !== 'snapshot' &&
+                        message?.kind !== 'heartbeat' &&
+                        message?.kind !== 'action-result')
                         throw new Error('Stream message callback must return a parsed message');
                     if (message.kind === 'snapshot' && !context.started) {
                         context.started = true;
@@ -183,6 +203,8 @@ export class StreamRunner {
                             this._clock.nowUs(),
                             context.messageSequence);
                     }
+                    if (message.kind === 'action-result')
+                        this._acceptActionResult(context, manifest, message, runId);
                     if (message.kind === 'snapshot' || context.started)
                         this._resetHeartbeat(context, manifest);
                 }
@@ -260,6 +282,7 @@ export class StreamRunner {
         } finally {
             removeSource(context, 'startupSourceId');
             removeSource(context, 'heartbeatSourceId');
+            removeSource(context, 'actionSourceId');
             removeSource(context, 'forceSourceId');
             removeSource(context, 'drainSourceId');
             if (this._active.get(manifest.id) === context)
@@ -294,6 +317,53 @@ export class StreamRunner {
             details);
     }
 
+    /**
+     * Sends one bounded activation to a healthy interactive stream.
+     *
+     * At most one request may be pending and requests are accepted at most
+     * four times per second per plugin.
+     */
+    activate(pluginId, actionId) {
+        const context = this._active.get(pluginId);
+        if (context === undefined ||
+            context.stdin === null ||
+            !context.started ||
+            context.cancelled ||
+            context.exited ||
+            context.failure !== null ||
+            context.pendingAction !== null)
+            return false;
+        const nowUs = this._clock.nowUs();
+        if (nowUs - context.lastActionUs < ACTION_INTERVAL_US)
+            return false;
+
+        context.nextRequestId = context.nextRequestId >= 2_147_483_647
+            ? 1
+            : context.nextRequestId + 1;
+        const requestId = context.nextRequestId;
+        const bytes = encodeActionRequest(actionId, requestId);
+        context.pendingAction = {requestId, actionId};
+        context.lastActionUs = nowUs;
+        context.actionSourceId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            ACTION_TIMEOUT_MS,
+            () => {
+                context.actionSourceId = 0;
+                this._terminate(
+                    context,
+                    'action-timeout',
+                    `Stream ${pluginId} did not acknowledge action ${requestId}`);
+                return GLib.SOURCE_REMOVE;
+            });
+        writeAll(context.stdin, bytes, context.cancellable).catch(error => {
+            this._terminate(
+                context,
+                'stdin-write',
+                `Writing stream ${pluginId} stdin: ${error.message}`);
+        });
+        return true;
+    }
+
     /** Terminates one active stream direct child. */
     cancel(pluginId) {
         const context = this._active.get(pluginId);
@@ -324,6 +394,23 @@ export class StreamRunner {
                     `Stream ${manifest.id} missed its heartbeat deadline`);
                 return GLib.SOURCE_REMOVE;
             });
+    }
+
+    _acceptActionResult(context, manifest, message, runId) {
+        if (context.pendingAction?.requestId !== message.requestId) {
+            throw new StreamRunError(
+                'action-result',
+                `Stream ${manifest.id} returned an unexpected action result`);
+        }
+        context.pendingAction = null;
+        removeSource(context, 'actionSourceId');
+        this._emit(
+            'stream-action-result',
+            manifest.id,
+            runId,
+            this._clock.nowUs(),
+            0,
+            {requestId: message.requestId, ok: message.ok});
     }
 
     _fail(context, kind, message) {
@@ -420,6 +507,23 @@ function waitForProcess(process) {
                 reject(error);
             }
         });
+    });
+}
+
+function writeAll(stream, bytes, cancellable) {
+    return new Promise((resolve, reject) => {
+        stream.write_all_async(
+            bytes,
+            GLib.PRIORITY_DEFAULT,
+            cancellable,
+            (source, result) => {
+                try {
+                    source.write_all_finish(result);
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            });
     });
 }
 

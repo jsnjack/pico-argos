@@ -33,4 +33,11 @@ if (!reserved.includes('PATH=/usr/local/bin:/usr/bin:/bin'))
 const oneShot = buildPluginEnvironment({id: 'test', passEnvironment: []}, false);
 if (!oneShot.includes('PICO_ARGOS_MENU_OPEN=false'))
     throw new Error('One-shot environment omitted menu-open state');
+const interactive = buildPluginEnvironment({
+    id: 'test',
+    passEnvironment: [],
+    protocolVersion: 2,
+});
+if (!interactive.includes('PICO_ARGOS_PROTOCOL=2'))
+    throw new Error('Interactive stream environment omitted protocol version 2');
 print('ok - child process environment is explicit and mode-specific');

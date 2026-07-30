@@ -9,9 +9,9 @@
 
 pico-argos is a universal GNOME Shell 50 status runtime. The core discovers,
 runs, validates, diffs, and renders plugin output. It must never learn domain
-logic for weather, GitHub, VPNs, hardware, or another integration. Put that
-logic in a user-installed plugin and communicate exclusively through protocol
-version 1.
+logic for weather, GitHub, VPNs, audio, hardware, or another integration. Put
+that logic in a user-installed plugin and communicate exclusively through the
+public versioned protocol.
 
 Treat plugins as trusted executables whose output crosses an untrusted-data
 boundary. Keep all work bounded. Never add an unbounded read, output history,
@@ -100,6 +100,10 @@ and applies bounded exponential restart/backoff. The plugin must flush each
 line, stay in the foreground, and exit when its stdout closes or it is
 terminated. It must not daemonize or leave grandchildren.
 
+Use manifest and protocol version 2 only when a stream needs data-only menu
+actions. The runtime provides a bounded stdin activation channel; version 1
+plugins remain output-only and unchanged.
+
 ## Version 1 manifests
 
 A minimal one-shot manifest is:
@@ -145,7 +149,7 @@ A minimal stream manifest is:
 }
 ```
 
-The exact rules are:
+The version 1 rules are:
 
 - `manifestVersion` is `1`. Unknown or wrong-mode fields are rejected.
 - `id` matches its directory and
@@ -184,6 +188,57 @@ PICO_ARGOS_MENU_OPEN=true|false  # one-shot only
 The working directory is the plugin directory. Use
 `PICO_ARGOS_MENU_OPEN=true` to include or refresh expensive menu details only
 when useful, but still emit a complete valid snapshot.
+
+## Interactive stream protocol version 2
+
+An interactive stream manifest uses:
+
+```json
+{
+  "manifestVersion": 2,
+  "protocolVersion": 2,
+  "id": "example-interactive",
+  "mode": "stream",
+  "command": ["gjs", "-m", "./run.js"],
+  "startupTimeoutMs": 5000,
+  "heartbeatTimeoutMs": 15000,
+  "maxMessagesPerSecond": 5,
+  "maxBytesPerMinute": 262144,
+  "position": "right",
+  "order": 0,
+  "nice": 10,
+  "reserveTextChars": 0,
+  "passEnvironment": [],
+  "failurePolicy": "show-error",
+  "maxStaleMs": 30000
+}
+```
+
+Protocol version 2 supports all version 1 snapshot fields plus action rows:
+
+```json
+{"id":"output:44","kind":"action","text":"Speakers","selected":true}
+```
+
+Action IDs contain identity only. They are at most 128 Unicode scalars and
+cannot carry shell, callback, JavaScript, URI, or arbitrary payload data. The
+selected row receives the native Shell dot and is not interactive. When an
+unselected current row is activated, stdin receives:
+
+```json
+{"version":2,"type":"activate","id":"output:44","requestId":7}
+```
+
+Validate the exact schema and bound stdin framing before acting. Respond within
+two seconds with a correlated result, then emit the authoritative snapshot:
+
+```json
+{"version":2,"type":"action-result","requestId":7,"ok":true}
+```
+
+The core accepts one pending action per plugin and at most four per second.
+Unexpected or late results fail the stream. Keep the plugin in the foreground,
+stop stdin reads on teardown, and never build a second unbounded action queue.
 
 ## Version 1 output
 
@@ -273,9 +328,10 @@ reference defaults are compatibility constraints:
 | Plugin | Required source/default | Maintained presentation |
 |---|---|---|
 | system monitor | Linux `/proc` and `/sys` counters | legacy `cpu`/`mem`/`io`, arrows, `KBs`/`MBs`, and 13 px monospace remain the default; compact is opt-in |
+| audio devices | WirePlumber 0.5 GObject API | compact current output/microphone; native selected actions switch system defaults without polling |
 | Dependabot | GitHub Dependabot alerts API | hidden at zero; urgent-update symbolic icon and count; up to five direct alert links |
 | pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
-| VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; larger, accent-colored literal `❄` glyph text (avoids duplicating GNOME's own generic VPN icon and the weather plugin's cloud icons); private country/city details with no public IP |
+| VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; larger monochrome `☠︎` skull-and-crossbones glyph text; private country/city details with no public IP |
 | weather | `https://weather.yauhen.cc/api/v1/glance` | center placement, temperature/rain dots/condition icon, concise details, and bounded rain timing |
 
 The `weather.yauhen.cc` source is deliberate. **Do not replace, proxy, or add a

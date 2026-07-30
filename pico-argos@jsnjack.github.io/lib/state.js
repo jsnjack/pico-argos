@@ -91,7 +91,7 @@ export class StateStore {
         } finally {
             observe?.('parse-end');
         }
-        if (message.kind === 'heartbeat') {
+        if (message.kind === 'heartbeat' || message.kind === 'action-result') {
             observe?.('validate-end');
             return {message, state: null};
         }
@@ -293,5 +293,7 @@ function diffMenuItem(previous, next) {
         fields.text = next.text;
     if (next.kind === 'link' && previous.uri !== next.uri)
         fields.uri = next.uri;
+    if (next.kind === 'action' && previous.selected !== next.selected)
+        fields.selected = next.selected;
     return Object.keys(fields).length === 0 ? null : {fields};
 }

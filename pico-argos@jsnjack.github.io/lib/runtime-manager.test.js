@@ -27,12 +27,21 @@ class FakeOneShotRunner {
 }
 
 class FakeStreamRunner {
-    run() {
+    run(manifest, callbacks) {
+        this.active.set(manifest.id, callbacks);
         return new Promise(() => {});
     }
 
     cancel() {}
     cancelAll() {}
+
+    activate(pluginId, actionId) {
+        this.activations.push([pluginId, actionId]);
+        return this.active.has(pluginId);
+    }
+
+    active = new Map();
+    activations = [];
 }
 
 function plugin(overrides = {}) {
@@ -89,10 +98,11 @@ const events = [];
 const phases = [];
 const added = [];
 const removed = [];
+const streamRunner = new FakeStreamRunner();
 const runtime = new RuntimeManager({
     clock,
     oneShotRunner,
-    streamRunner: new FakeStreamRunner(),
+    streamRunner,
     onChanges: (source, change, kind, _presentation, cycleId) =>
         changes.push([source.id, change, kind, cycleId]),
     onEvent: event => events.push(event),
@@ -184,6 +194,7 @@ if (runtime.snapshot().plugins[0].lastFailure !== null)
 
 runtime.setPlugin(plugin({
     mode: 'stream',
+    protocolVersion: 2,
     startupTimeoutMs: 5_000,
     heartbeatTimeoutMs: 0,
     maxMessagesPerSecond: 2,
@@ -192,6 +203,31 @@ runtime.setPlugin(plugin({
 await settleIdle();
 if (runtime.snapshot().plugins[0].processState !== 'starting')
     throw new Error('Replacement stream did not enter starting health state');
+streamRunner.active.get('fixture').onMessage(JSON.stringify({
+    version: 2,
+    type: 'snapshot',
+    panel: {text: 'Audio'},
+    menu: [{
+        id: 'output:44',
+        kind: 'action',
+        text: 'Speakers',
+        selected: false,
+    }],
+}), {runId: 8, sequence: 1});
+if (!runtime.activateMenuAction('fixture', 'output:44') ||
+    JSON.stringify(streamRunner.activations) !==
+    JSON.stringify([['fixture', 'output:44']]))
+    throw new Error('Runtime did not activate a current protocol-v2 menu action');
+if (runtime.activateMenuAction('fixture', 'missing'))
+    throw new Error('Runtime activated an action absent from current state');
+streamRunner.active.get('fixture').onMessage(JSON.stringify({
+    version: 2,
+    type: 'action-result',
+    requestId: 1,
+    ok: true,
+}), {runId: 8, sequence: 2});
+if (runtime.snapshot().plugins[0].actionSuccesses !== 1)
+    throw new Error('Runtime did not account for an action result');
 runtime.setPlugin(plugin({refreshOnOpen: false}));
 if (runtime.snapshot().plugins[0].processState !== 'idle' ||
     runtime.snapshot().plugins[0].mode !== 'oneshot') {

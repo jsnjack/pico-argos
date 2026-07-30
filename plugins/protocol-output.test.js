@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import {parseProtocolMessage} from '../pico-argos@jsnjack.github.io/lib/protocol.js';
+import {audioSnapshot} from './audio-devices/logic.js';
 import {dependabotSnapshot} from './dependabot/logic.js';
 import {pullReviewsSnapshot} from './pull-reviews/logic.js';
 import {systemSnapshot} from './system-monitor/metrics.js';
@@ -8,6 +9,12 @@ import {vpnSnapshot} from './vpn/logic.js';
 import {weatherSnapshot} from './weather/logic.js';
 
 const snapshots = [
+    audioSnapshot({
+        outputs: [{id: 44, nodeName: 'output', label: 'Speakers'}],
+        inputs: [{id: 59, nodeName: 'input', label: 'Microphone'}],
+        defaultOutputId: 44,
+        defaultInputId: 59,
+    }),
     dependabotSnapshot([
         {state: 'open', security_advisory: {severity: 'critical'}},
     ], 'example/project'),
@@ -24,7 +31,9 @@ const snapshots = [
     }),
 ];
 for (const snapshot of snapshots) {
-    const parsed = parseProtocolMessage(JSON.stringify(snapshot));
+    const parsed = parseProtocolMessage(JSON.stringify(snapshot), {
+        protocolVersion: snapshot.version,
+    });
     if (parsed.kind !== 'snapshot')
         throw new Error('Reference plugin output did not parse as a snapshot');
 }
