@@ -36,4 +36,5 @@ Use `wpctl status -n` to inspect node names.
 The plugin reacts to device hotplug and default-node changes, emits a heartbeat
 every five seconds, and treats action IDs as session-local. If a device
 disappears before activation, the request fails safely and the plugin emits a
-fresh authoritative snapshot.
+fresh authoritative snapshot. Routes that PipeWire explicitly marks unavailable
+are omitted; routes with unknown availability remain visible.

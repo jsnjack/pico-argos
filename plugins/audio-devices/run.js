@@ -14,6 +14,7 @@ import {
     parseActivation,
     parseAudioConfig,
 } from './logic.js';
+import {parsePorts, portKey} from './ports.js';
 
 const DEFAULT_SINK_CLASS = 'Audio/Sink';
 const DEFAULT_SOURCE_CLASS = 'Audio/Source';
@@ -178,6 +179,8 @@ function collectState() {
             nodeProperty(node, 'device.id'),
             nodeProperty(node, 'card.profile.device'),
             prefix === 'output' ? 'Output' : 'Input')) ?? null;
+        if (port?.availability === 'no')
+            return true;
         const device = {
             id,
             nodeName,
@@ -276,55 +279,6 @@ function dumpPorts() {
             }
         });
     });
-}
-
-/** Collapses one `pw-dump` document to active port names and port counts. */
-function parsePorts(objects) {
-    const ports = new Map();
-    if (!Array.isArray(objects))
-        throw new Error('pw-dump output is not an array');
-    for (const object of objects) {
-        if (object?.type !== 'PipeWire:Interface:Device')
-            continue;
-        const params = object.info?.params;
-        if (params === null || typeof params !== 'object')
-            continue;
-        for (const route of asArray(params.Route)) {
-            if (!Number.isInteger(route?.device) ||
-                typeof route.direction !== 'string' ||
-                typeof route.description !== 'string')
-                continue;
-            const key = portKey(object.id, route.device, route.direction);
-            ports.set(key, {
-                description: route.description,
-                choices: ports.get(key)?.choices ?? 0,
-            });
-        }
-        for (const route of asArray(params.EnumRoute)) {
-            if (!Array.isArray(route?.devices) ||
-                typeof route.direction !== 'string')
-                continue;
-            for (const device of route.devices) {
-                if (!Number.isInteger(device))
-                    continue;
-                const key = portKey(object.id, device, route.direction);
-                const entry = ports.get(key);
-                if (entry === undefined)
-                    ports.set(key, {description: null, choices: 1});
-                else
-                    entry.choices++;
-            }
-        }
-    }
-    return ports;
-}
-
-function portKey(deviceId, cardDevice, direction) {
-    return `${deviceId}:${cardDevice}:${direction}`;
-}
-
-function asArray(value) {
-    return Array.isArray(value) ? value : [];
 }
 
 function readInput() {
