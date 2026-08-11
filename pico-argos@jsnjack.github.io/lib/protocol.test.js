@@ -2,6 +2,7 @@
 
 import {
     encodeActionRequest,
+    encodeMenuOpenRequest,
     MAX_MESSAGE_BYTES,
     parseProtocolMessage,
     ProtocolError,
@@ -119,6 +120,9 @@ assertInvalid({
 assertEqual(new TextDecoder().decode(encodeActionRequest('output:44', 7)),
     '{"version":2,"type":"activate","id":"output:44","requestId":7}\n',
     'encoded action request');
+assertEqual(new TextDecoder().decode(encodeMenuOpenRequest()),
+    '{"version":2,"type":"menu-open"}\n',
+    'encoded menu-open request');
 assertInvalid({version: 1, type: 'snapshot', panel: null, menu: [], typo: true}, /unknown/);
 assertInvalid({version: 1, type: 'snapshot', panel: {visible: true}, menu: []}, /text or icon/);
 assertInvalid({version: 1, type: 'snapshot', panel: {icon: 'test-symbolic'}, menu: []}, /accessible/);

@@ -174,9 +174,16 @@ export class RuntimeManager {
         this._onPhase = null;
     }
 
-    /** Requests the manifest-gated one-shot menu-open refresh. */
+    /** Requests the manifest-gated menu-open refresh for either runtime mode. */
     refreshOnOpen(pluginId) {
-        return this._oneShotScheduler.requestRefresh(pluginId);
+        const plugin = this._plugins.get(pluginId);
+        if (plugin?.manifest.mode === 'oneshot')
+            return this._oneShotScheduler.requestRefresh(pluginId);
+        if (plugin?.manifest.mode === 'stream' &&
+            plugin.manifest.protocolVersion === 2 &&
+            plugin.manifest.refreshOnOpen)
+            return this._streamSupervisor.menuOpened(pluginId);
+        return false;
     }
 
     /** Requests one explicit user-initiated one-shot refresh. */

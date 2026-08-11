@@ -535,7 +535,8 @@ Manifest rules:
   30,000; `heartbeatTimeoutMs` defaults to `0` (disabled) and is either `0` or
   1,000 through 300,000; `maxMessagesPerSecond` defaults to `2` and is 1 through
   10; and `maxBytesPerMinute` defaults to 262,144 and is 65,536 through
-  1,048,576. One-shot-only fields are rejected.
+  1,048,576. Protocol version 2 streams may set boolean `refreshOnOpen`, which
+  defaults to `false`; version 1 streams reject it.
 - `position` is `left`, `center`, or `right`.
 - `order` is an integer. Ordering is `(position, order, id)`.
 - Left-positioned plugin indicators follow the Shell's built-in left-side
@@ -704,6 +705,19 @@ stdin write failure, or missing result after two seconds fails the stream and
 enters normal restart policy. Action results do not enter `StateStore` or
 directly mutate UI. After handling an action, the plugin emits an authoritative
 snapshot; its semantic diff updates selection and visible state.
+
+A protocol version 2 stream with `refreshOnOpen: true` also receives this
+newline-terminated object whenever its menu opens:
+
+```json
+{"version":2,"type":"menu-open"}
+```
+
+The notification has no acknowledgement or request ID. The plugin responds by
+emitting a fresh authoritative snapshot. The core accepts at most four menu-open
+notifications per second per plugin, permits only one asynchronous stdin write
+at a time, and drops a notification when that write slot is busy. Streams that
+omit `refreshOnOpen` receive no menu-open input.
 
 ### 8.4 Failure Semantics
 

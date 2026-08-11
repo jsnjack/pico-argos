@@ -59,6 +59,7 @@ assertEqual(normalizedStream.startupTimeoutMs, 5_000, 'startup default');
 assertEqual(normalizedStream.heartbeatTimeoutMs, 0, 'heartbeat default');
 assertEqual(normalizedStream.maxMessagesPerSecond, 2, 'message default');
 assertEqual(normalizedStream.maxBytesPerMinute, 262_144, 'byte default');
+assertEqual(normalizedStream.refreshOnOpen, false, 'stream menu-open default');
 
 assertInvalid({id: 'other'}, /directory/);
 assertInvalid({manifestVersion: 3}, /version/);
@@ -100,8 +101,11 @@ const interactiveStream = validateManifest({
     ...stream,
     manifestVersion: 2,
     protocolVersion: 2,
+    refreshOnOpen: true,
 }, '/tmp/plugins/test', 'test');
 assertEqual(interactiveStream.protocolVersion, 2, 'interactive protocol version');
+assertEqual(interactiveStream.refreshOnOpen, true, 'interactive menu-open refresh');
+assertInvalid({refreshOnOpen: true}, /unknown/, 'stream');
 assertInvalid({manifestVersion: 2}, /protocolVersion/, 'stream');
 assertInvalid({manifestVersion: 2, protocolVersion: 1}, /protocolVersion/, 'stream');
 

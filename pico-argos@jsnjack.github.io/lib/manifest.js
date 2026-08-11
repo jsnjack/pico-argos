@@ -38,7 +38,7 @@ const COMMON_KEYS = new Set([
     'failurePolicy',
     'maxStaleMs',
 ]);
-const V2_KEYS = new Set(['protocolVersion']);
+const V2_KEYS = new Set(['protocolVersion', 'refreshOnOpen']);
 const ONESHOT_KEYS = new Set(['intervalMs', 'timeoutMs', 'refreshOnOpen']);
 const STREAM_KEYS = new Set([
     'startupTimeoutMs',
@@ -216,17 +216,21 @@ function validateStream(value) {
     const heartbeatTimeoutMs = value.heartbeatTimeoutMs ?? 0;
     const maxMessagesPerSecond = value.maxMessagesPerSecond ?? 2;
     const maxBytesPerMinute = value.maxBytesPerMinute ?? 262_144;
+    const refreshOnOpen = value.refreshOnOpen ?? false;
 
     requireIntegerRange(startupTimeoutMs, 100, 30_000, 'Manifest startupTimeoutMs');
     if (heartbeatTimeoutMs !== 0)
         requireIntegerRange(heartbeatTimeoutMs, 1_000, 300_000, 'Manifest heartbeatTimeoutMs');
     requireIntegerRange(maxMessagesPerSecond, 1, 10, 'Manifest maxMessagesPerSecond');
     requireIntegerRange(maxBytesPerMinute, 65_536, 1_048_576, 'Manifest maxBytesPerMinute');
+    if (typeof refreshOnOpen !== 'boolean')
+        throw new ManifestError('Manifest refreshOnOpen must be boolean');
     return {
         startupTimeoutMs,
         heartbeatTimeoutMs,
         maxMessagesPerSecond,
         maxBytesPerMinute,
+        refreshOnOpen,
     };
 }
 

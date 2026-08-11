@@ -13,6 +13,7 @@ const TOP_LEVEL_KEYS = new Set(['version', 'type', 'panel', 'menu']);
 const HEARTBEAT_KEYS = new Set(['version', 'type']);
 const ACTION_RESULT_KEYS = new Set(['version', 'type', 'requestId', 'ok', 'message']);
 const ACTION_REQUEST_KEYS = new Set(['version', 'type', 'id', 'requestId']);
+const MENU_OPEN_REQUEST_KEYS = new Set(['version', 'type']);
 const PANEL_KEYS = new Set([
     'visible',
     'text',
@@ -201,6 +202,16 @@ export function encodeActionRequest(id, requestId) {
         requestId,
     };
     rejectUnknownKeys(value, ACTION_REQUEST_KEYS, 'Action request');
+    return new TextEncoder().encode(`${JSON.stringify(value)}\n`);
+}
+
+/** Encodes one core-to-plugin menu-open notification and trailing newline. */
+export function encodeMenuOpenRequest() {
+    const value = {
+        version: INTERACTIVE_PROTOCOL_VERSION,
+        type: 'menu-open',
+    };
+    rejectUnknownKeys(value, MENU_OPEN_REQUEST_KEYS, 'Menu-open request');
     return new TextEncoder().encode(`${JSON.stringify(value)}\n`);
 }
 

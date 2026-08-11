@@ -122,6 +122,17 @@ export class StreamSupervisor {
         return this._runner.activate(pluginId, actionId);
     }
 
+    /** Forwards one menu-open notification to a current running stream. */
+    menuOpened(pluginId) {
+        const state = this._states.get(pluginId);
+        if (state === undefined ||
+            !this._started ||
+            !state.running ||
+            !this._isAdmitted(state))
+            return false;
+        return this._runner.menuOpened(pluginId);
+    }
+
     /** Returns bounded health and concurrency state. */
     snapshot() {
         return {

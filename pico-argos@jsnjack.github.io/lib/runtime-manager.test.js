@@ -40,8 +40,14 @@ class FakeStreamRunner {
         return this.active.has(pluginId);
     }
 
+    menuOpened(pluginId) {
+        this.menuOpens.push(pluginId);
+        return this.active.has(pluginId);
+    }
+
     active = new Map();
     activations = [];
+    menuOpens = [];
 }
 
 function plugin(overrides = {}) {
@@ -199,10 +205,14 @@ runtime.setPlugin(plugin({
     heartbeatTimeoutMs: 0,
     maxMessagesPerSecond: 2,
     maxBytesPerMinute: 262_144,
+    refreshOnOpen: true,
 }));
 await settleIdle();
 if (runtime.snapshot().plugins[0].processState !== 'starting')
     throw new Error('Replacement stream did not enter starting health state');
+if (!runtime.refreshOnOpen('fixture') ||
+    JSON.stringify(streamRunner.menuOpens) !== JSON.stringify(['fixture']))
+    throw new Error('Runtime did not notify an opted-in stream on menu open');
 streamRunner.active.get('fixture').onMessage(JSON.stringify({
     version: 2,
     type: 'snapshot',

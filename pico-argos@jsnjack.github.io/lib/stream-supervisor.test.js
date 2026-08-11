@@ -59,9 +59,15 @@ class FakeRunner {
         return this.active.has(pluginId);
     }
 
+    menuOpened(pluginId) {
+        this.menuOpens.push(pluginId);
+        return this.active.has(pluginId);
+    }
+
     starts = [];
     cancellations = [];
     activations = [];
+    menuOpens = [];
     active = new Map();
 }
 
@@ -121,6 +127,11 @@ if (!supervisor.activate('stream-0', 'output:44') ||
     throw new Error('Supervisor did not forward a current menu activation');
 if (supervisor.activate('stream-4', 'output:44'))
     throw new Error('Supervisor activated a stream outside the admission limit');
+if (!supervisor.menuOpened('stream-0') ||
+    JSON.stringify(runner.menuOpens) !== JSON.stringify(['stream-0']))
+    throw new Error('Supervisor did not forward a current menu-open notification');
+if (supervisor.menuOpened('stream-4'))
+    throw new Error('Supervisor notified a stream outside the admission limit');
 runner.active.get('stream-0').reject({kind: 'fixture'});
 runner.active.delete('stream-0');
 await settle();

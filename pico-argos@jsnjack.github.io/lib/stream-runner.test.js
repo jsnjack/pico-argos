@@ -165,6 +165,47 @@ try {
         throw error;
 }
 
+const menuOpenMessages = [];
+const menuOpenRun = runner.run(manifest('interactive-menu-open', {
+    id: 'interactive-menu-open',
+    protocolVersion: 2,
+}), {
+    onMessage: raw => {
+        const message = parseProtocolMessage(raw, {
+            allowHeartbeat: true,
+            allowActionResult: true,
+            protocolVersion: 2,
+        });
+        menuOpenMessages.push(message);
+        return message;
+    },
+});
+while (!menuOpenMessages.some(message =>
+    message.kind === 'snapshot' && message.snapshot.panel.text === 'Cached')) {
+    await new Promise(resolve => GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+        resolve();
+        return GLib.SOURCE_REMOVE;
+    }));
+}
+if (!runner.menuOpened('interactive-menu-open') ||
+    runner.menuOpened('interactive-menu-open'))
+    throw new Error('Interactive stream did not bound menu-open notifications');
+while (!menuOpenMessages.some(message =>
+    message.kind === 'snapshot' && message.snapshot.panel.text === 'Refreshed')) {
+    await new Promise(resolve => GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+        resolve();
+        return GLib.SOURCE_REMOVE;
+    }));
+}
+runner.cancel('interactive-menu-open');
+try {
+    await menuOpenRun;
+    throw new Error('Cancelled menu-open stream unexpectedly completed');
+} catch (error) {
+    if (!(error instanceof StreamRunError) || error.kind !== 'cancelled')
+        throw error;
+}
+
 let noResultStarted = false;
 const noResultRun = runner.run(manifest('interactive-no-result', {
     id: 'interactive-no-result',

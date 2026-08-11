@@ -132,6 +132,41 @@ switch (ARGV[0]) {
         loop.run();
         break;
     }
+    case 'interactive-menu-open': {
+        const loop = GLib.MainLoop.new(null, false);
+        const stdin = GioUnix.InputStream.new(0, false);
+        const input = new Gio.DataInputStream({base_stream: stdin});
+        write(stdout, `${JSON.stringify({
+            version: 2,
+            type: 'snapshot',
+            panel: {text: 'Cached'},
+            menu: [],
+        })}\n`);
+        const read = () => input.read_line_async(
+            GLib.PRIORITY_DEFAULT,
+            null,
+            (source, result) => {
+                const [line] = source.read_line_finish(result);
+                if (line === null) {
+                    loop.quit();
+                    return;
+                }
+                const request = JSON.parse(new TextDecoder().decode(line));
+                if (request.version !== 2 || request.type !== 'menu-open' ||
+                    Object.keys(request).length !== 2)
+                    throw new Error('Invalid menu-open request');
+                write(stdout, `${JSON.stringify({
+                    version: 2,
+                    type: 'snapshot',
+                    panel: {text: 'Refreshed'},
+                    menu: [],
+                })}\n`);
+                read();
+            });
+        read();
+        loop.run();
+        break;
+    }
     case 'interactive-no-result': {
         const loop = GLib.MainLoop.new(null, false);
         const stdin = GioUnix.InputStream.new(0, false);

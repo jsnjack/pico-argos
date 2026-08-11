@@ -6,6 +6,7 @@ import GLib from 'gi://GLib';
 import {buildPluginEnvironment} from './process-environment.js';
 import {
     encodeActionRequest,
+    encodeMenuOpenRequest,
     INTERACTIVE_PROTOCOL_VERSION,
     parseProtocolMessage,
 } from './protocol.js';
@@ -16,6 +17,7 @@ const TERMINATE_GRACE_MS = 250;
 const PIPE_DRAIN_MS = 250;
 const ACTION_TIMEOUT_MS = 2_000;
 const ACTION_INTERVAL_US = 250_000;
+const MENU_OPEN_INTERVAL_US = 250_000;
 
 /** Describes one supervised stream child failure. */
 export class StreamRunError extends Error {
@@ -113,6 +115,8 @@ export class StreamRunner {
             pendingAction: null,
             actionSourceId: 0,
             lastActionUs: Number.NEGATIVE_INFINITY,
+            lastMenuOpenUs: Number.NEGATIVE_INFINITY,
+            stdinWriting: false,
         };
         this._active.set(manifest.id, context);
         context.startupSourceId = GLib.timeout_add(
@@ -331,7 +335,8 @@ export class StreamRunner {
             context.cancelled ||
             context.exited ||
             context.failure !== null ||
-            context.pendingAction !== null)
+            context.pendingAction !== null ||
+            context.stdinWriting)
             return false;
         const nowUs = this._clock.nowUs();
         if (nowUs - context.lastActionUs < ACTION_INTERVAL_US)
@@ -355,12 +360,26 @@ export class StreamRunner {
                     `Stream ${pluginId} did not acknowledge action ${requestId}`);
                 return GLib.SOURCE_REMOVE;
             });
-        writeAll(context.stdin, bytes, context.cancellable).catch(error => {
-            this._terminate(
-                context,
-                'stdin-write',
-                `Writing stream ${pluginId} stdin: ${error.message}`);
-        });
+        this._writeInput(context, pluginId, bytes);
+        return true;
+    }
+
+    /** Sends one bounded, rate-limited menu-open notification. */
+    menuOpened(pluginId) {
+        const context = this._active.get(pluginId);
+        if (context === undefined ||
+            context.stdin === null ||
+            !context.started ||
+            context.cancelled ||
+            context.exited ||
+            context.failure !== null ||
+            context.stdinWriting)
+            return false;
+        const nowUs = this._clock.nowUs();
+        if (nowUs - context.lastMenuOpenUs < MENU_OPEN_INTERVAL_US)
+            return false;
+        context.lastMenuOpenUs = nowUs;
+        this._writeInput(context, pluginId, encodeMenuOpenRequest());
         return true;
     }
 
@@ -411,6 +430,18 @@ export class StreamRunner {
             this._clock.nowUs(),
             0,
             {requestId: message.requestId, ok: message.ok});
+    }
+
+    _writeInput(context, pluginId, bytes) {
+        context.stdinWriting = true;
+        writeAll(context.stdin, bytes, context.cancellable).catch(error => {
+            this._terminate(
+                context,
+                'stdin-write',
+                `Writing stream ${pluginId} stdin: ${error.message}`);
+        }).finally(() => {
+            context.stdinWriting = false;
+        });
     }
 
     _fail(context, kind, message) {

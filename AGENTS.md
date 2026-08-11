@@ -78,7 +78,7 @@ The implemented production flow and its retained Phase 0 instrumentation are:
 13. `RenderCoordinator` collapses each plugin to its latest presentation and
     caps global batches at 10/s; `PluginIndicator` retains panel leaves,
     creates keyed menu actors only on first open, and routes data-only action
-    IDs back to current interactive streams.
+    IDs and opt-in menu-open notifications to current interactive streams.
 14. `ExtensionController` wires the monitored registry, runtimes, renderer, and
     production diagnostic interface with generation-guarded teardown.
 15. `prefs.js` reads the live bounded summary only while its Diagnostics page

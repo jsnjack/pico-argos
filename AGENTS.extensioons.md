@@ -210,6 +210,7 @@ An interactive stream manifest uses:
   "heartbeatTimeoutMs": 15000,
   "maxMessagesPerSecond": 5,
   "maxBytesPerMinute": 262144,
+  "refreshOnOpen": false,
   "position": "right",
   "order": 0,
   "nice": 10,
@@ -220,7 +221,18 @@ An interactive stream manifest uses:
 }
 ```
 
-Protocol version 2 supports all version 1 snapshot fields plus action rows:
+Protocol version 2 supports all version 1 snapshot fields plus action rows and
+an optional menu-open notification. Set `refreshOnOpen` to `true` to receive:
+
+```json
+{"version":2,"type":"menu-open"}
+```
+
+The notification requires no acknowledgement. Emit a fresh authoritative
+snapshot after receiving it. The core bounds notifications and serializes them
+with activation writes.
+
+Action rows use:
 
 ```json
 {"id":"output:44","kind":"action","text":"Speakers","selected":true}
