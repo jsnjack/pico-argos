@@ -1166,6 +1166,9 @@ Required behavior:
   item.
 - List bounded Output and Microphone action rows in the plugin menu with native
   selected-row ornaments.
+- List at most three active application playback and microphone routes from
+  actual PipeWire links. Mark routes that differ from the corresponding system
+  default and keep them read-only.
 - Switch only the system defaults. Volume, mute, profiles, ports, and
   per-application routing are outside this plugin.
 - React to WirePlumber default changes and PipeWire device hotplug without

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import {
+    MAX_ACTIVE_ROUTES,
     audioSnapshot,
     MAX_DEVICES_PER_CLASS,
     parseActivation,
+    parseAudioRequest,
     parseAudioConfig,
 } from './logic.js';
 
@@ -54,6 +56,50 @@ assertEqual(snapshot.menu.filter(item => item.kind === 'action'), [
     {id: 'output:45', kind: 'action', text: 'LinkBuds Fit', selected: true},
     {id: 'input:59', kind: 'action', text: 'Laptop mic', selected: true},
 ], 'device action rows');
+
+const routed = audioSnapshot({
+    ...state,
+    routes: [
+        {
+            streamId: 91,
+            direction: 'output',
+            application: 'Firefox',
+            deviceId: 44,
+        },
+        {
+            streamId: 92,
+            direction: 'input',
+            application: 'Firefox',
+            deviceId: 59,
+        },
+        {
+            streamId: 91,
+            direction: 'output',
+            application: 'Firefox',
+            deviceId: 44,
+        },
+        {
+            streamId: 93,
+            direction: 'output',
+            application: 'Missing device',
+            deviceId: 999,
+        },
+    ],
+}, {
+    aliases: {'alsa.input': 'Laptop mic'},
+});
+assertEqual(routed.menu.filter(item => item.id.startsWith('route:')), [
+    {
+        id: 'route:input:92:59',
+        kind: 'label',
+        text: 'Firefox — microphone ← Laptop mic',
+    },
+    {
+        id: 'route:output:91:44',
+        kind: 'label',
+        text: 'Firefox — playback → Built-in Audio Analog Stereo (not default)',
+    },
+], 'effective application routes');
 
 const absent = audioSnapshot({
     outputs: [],
@@ -149,17 +195,33 @@ const bounded = audioSnapshot({
     })),
     defaultOutputId: null,
     defaultInputId: null,
+    routes: Array.from({length: 8}, (_value, index) => ({
+        streamId: 200 + index,
+        direction: 'output',
+        application: `Application ${index}`,
+        deviceId: index,
+    })),
 });
 assertEqual(
     bounded.menu.filter(item => item.kind === 'action').length,
     MAX_DEVICES_PER_CLASS * 2,
     'bounded device menus');
+assertEqual(
+    bounded.menu.filter(item => item.id.startsWith('route:')).length,
+    MAX_ACTIVE_ROUTES,
+    'bounded application routes');
 if (bounded.menu.length > 64)
     throw new Error(`Audio menu exceeded protocol limit: ${bounded.menu.length}`);
 
 assertEqual(parseActivation(
     '{"version":2,"type":"activate","id":"output:44","requestId":7}'),
 {id: 'output:44', requestId: 7}, 'activation input');
+assertEqual(parseAudioRequest(
+    '{"version":2,"type":"menu-open"}'),
+{type: 'menu-open'}, 'menu-open input');
+assertInvalid(() => parseAudioRequest(
+    '{"version":2,"type":"menu-open","requestId":7}'),
+/unknown/);
 assertInvalid(() => parseActivation(
     '{"version":2,"type":"activate","id":"output:44","requestId":0}'),
 /requestId/);

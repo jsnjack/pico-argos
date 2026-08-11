@@ -23,6 +23,8 @@ for (const id of [
         throw new Error('System monitor must use the available left panel space');
     if (id === 'audio-devices' && manifest.protocolVersion !== 2)
         throw new Error('Audio devices must use the interactive protocol');
+    if (id === 'audio-devices' && !manifest.refreshOnOpen)
+        throw new Error('Audio devices must refresh when its menu opens');
     if (id === 'audio-devices' &&
         (manifest.position !== 'right' || manifest.order !== 40))
         throw new Error('Audio devices must sit beside the right-side system controls');

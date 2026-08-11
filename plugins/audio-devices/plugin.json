@@ -8,6 +8,7 @@
   "heartbeatTimeoutMs": 15000,
   "maxMessagesPerSecond": 5,
   "maxBytesPerMinute": 262144,
+  "refreshOnOpen": true,
   "position": "right",
   "order": 40,
   "nice": 10,

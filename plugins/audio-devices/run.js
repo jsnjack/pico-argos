@@ -11,10 +11,10 @@ import System from 'system';
 
 import {
     audioSnapshot,
-    parseActivation,
+    parseAudioRequest,
     parseAudioConfig,
 } from './logic.js';
-import {parsePorts, portKey} from './ports.js';
+import {isDevicePortVisible, parsePorts, portKey} from './ports.js';
 
 const DEFAULT_SINK_CLASS = 'Audio/Sink';
 const DEFAULT_SOURCE_CLASS = 'Audio/Source';
@@ -63,8 +63,12 @@ try {
 
     manager = Wp.ObjectManager.new();
     manager.add_interest_full(Wp.ObjectInterest.new_type(Wp.Node.$gtype));
+    manager.add_interest_full(Wp.ObjectInterest.new_type(Wp.Link.$gtype));
     manager.request_object_features(
         Wp.Node.$gtype,
+        Wp.ProxyFeatures.PIPEWIRE_OBJECT_FEATURES_MINIMAL);
+    manager.request_object_features(
+        Wp.Link.$gtype,
         Wp.ProxyFeatures.PIPEWIRE_OBJECT_FEATURES_MINIMAL);
     await installObjectManager(core, manager);
 
@@ -158,20 +162,25 @@ function collectState() {
     const outputs = [];
     const inputs = [];
     const targets = new Map();
+    const nodes = new Map();
+    const defaultOutputId = defaultNodeId(DEFAULT_SINK_CLASS);
+    const defaultInputId = defaultNodeId(DEFAULT_SOURCE_CLASS);
     const iterator = manager.new_iterator();
     iterator.foreach(node => {
         if (!(node instanceof Wp.Node))
             return true;
+        const boundId = node.get_bound_id();
+        if (!Number.isInteger(boundId) ||
+            boundId < 0 ||
+            boundId >= 4_294_967_295)
+            return true;
+        nodes.set(boundId, node);
         const mediaClass = nodeProperty(node, 'media.class');
         if (mediaClass !== DEFAULT_SINK_CLASS &&
             mediaClass !== DEFAULT_SOURCE_CLASS)
             return true;
-        const boundId = node.get_bound_id();
         const nodeName = nodeProperty(node, 'node.name');
-        if (!Number.isInteger(boundId) ||
-            boundId < 0 ||
-            boundId >= 4_294_967_295 ||
-            nodeName === null)
+        if (nodeName === null)
             return true;
         const id = String(boundId);
         const prefix = mediaClass === DEFAULT_SINK_CLASS ? 'output' : 'input';
@@ -179,7 +188,8 @@ function collectState() {
             nodeProperty(node, 'device.id'),
             nodeProperty(node, 'card.profile.device'),
             prefix === 'output' ? 'Output' : 'Input')) ?? null;
-        if (port?.availability === 'no')
+        const defaultId = prefix === 'output' ? defaultOutputId : defaultInputId;
+        if (!isDevicePortVisible(port, id, defaultId))
             return true;
         const device = {
             id,
@@ -209,8 +219,49 @@ function collectState() {
     return {
         outputs,
         inputs,
-        defaultOutputId: defaultNodeId(DEFAULT_SINK_CLASS),
-        defaultInputId: defaultNodeId(DEFAULT_SOURCE_CLASS),
+        defaultOutputId,
+        defaultInputId,
+        routes: collectRoutes(nodes),
+    };
+}
+
+function collectRoutes(nodes) {
+    const routes = [];
+    const iterator = manager.new_iterator();
+    iterator.foreach(link => {
+        if (!(link instanceof Wp.Link))
+            return true;
+        const [outputNodeId, , inputNodeId] = link.get_linked_object_ids();
+        const outputNode = nodes.get(outputNodeId);
+        const inputNode = nodes.get(inputNodeId);
+        if (outputNode === undefined || inputNode === undefined)
+            return true;
+        const outputClass = nodeProperty(outputNode, 'media.class');
+        const inputClass = nodeProperty(inputNode, 'media.class');
+        if (outputClass === 'Stream/Output/Audio' &&
+            inputClass === DEFAULT_SINK_CLASS) {
+            routes.push(applicationRoute(outputNode, inputNode, 'output'));
+        } else if (outputClass === DEFAULT_SOURCE_CLASS &&
+            inputClass === 'Stream/Input/Audio') {
+            routes.push(applicationRoute(inputNode, outputNode, 'input'));
+        }
+        return true;
+    });
+    return routes;
+}
+
+function applicationRoute(stream, device, direction) {
+    return {
+        streamId: String(stream.get_bound_id()),
+        direction,
+        application: firstProperty(stream, [
+            'application.name',
+            'node.description',
+            'media.name',
+            'application.process.binary',
+            'node.name',
+        ]),
+        deviceId: String(device.get_bound_id()),
     };
 }
 
@@ -315,21 +366,25 @@ function acceptInputChunk(chunk) {
             continue;
         const length = index - begin;
         if (length > MAX_INPUT_LINE_BYTES)
-            throw new Error('Audio activation line exceeds 4096 bytes');
-        handleActivation(decoder.decode(joined.slice(begin, index)));
+            throw new Error('Audio input line exceeds 4096 bytes');
+        handleRequest(decoder.decode(joined.slice(begin, index)));
         begin = index + 1;
     }
     pendingInput = joined.slice(begin);
     if (pendingInput.length > MAX_INPUT_LINE_BYTES)
-        throw new Error('Audio activation line exceeds 4096 bytes');
+        throw new Error('Audio input line exceeds 4096 bytes');
 }
 
-function handleActivation(raw) {
+function handleRequest(raw) {
     let request;
     try {
-        request = parseActivation(raw);
+        request = parseAudioRequest(raw);
     } catch (error) {
-        throw new Error(`Rejecting core activation: ${error.message}`);
+        throw new Error(`Rejecting core input: ${error.message}`);
+    }
+    if (request.type === 'menu-open') {
+        emitSnapshot(true);
+        return;
     }
     const target = actionTargets.get(request.id);
     if (target === undefined) {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 export const MAX_DEVICES_PER_CLASS = 28;
+export const MAX_ACTIVE_ROUTES = 3;
 
 /** Converts bounded PipeWire device state into one protocol-v2 snapshot. */
 export function audioSnapshot(state, config = {}) {
@@ -33,6 +34,11 @@ export function audioSnapshot(state, config = {}) {
     menu.push(...deviceActions('input', normalized.inputs, input?.id ?? null));
     if (normalized.inputs.length === 0)
         menu.push(label('input-empty', 'No microphones'));
+    if (normalized.routes.length !== 0) {
+        menu.push({id: 'route-separator', kind: 'separator'});
+        menu.push(label('route-heading', 'Active applications'));
+        menu.push(...routeLabels(normalized));
+    }
 
     return {
         version: 2,
@@ -78,15 +84,29 @@ export function parseAudioConfig(value) {
 
 /** Strictly parses one core-to-plugin activation line. */
 export function parseActivation(raw) {
+    const request = parseAudioRequest(raw);
+    if (request.type !== 'activate')
+        throw new Error('Audio request is not an activation');
+    return Object.freeze({id: request.id, requestId: request.requestId});
+}
+
+/** Strictly parses one core-to-plugin protocol-v2 input line. */
+export function parseAudioRequest(raw) {
     if (typeof raw !== 'string' || new TextEncoder().encode(raw).length > 4_096)
-        throw new Error('Audio activation exceeds 4096 bytes');
+        throw new Error('Audio request exceeds 4096 bytes');
     let value;
     try {
         value = JSON.parse(raw);
     } catch (error) {
-        throw new Error(`Invalid audio activation JSON: ${error.message}`);
+        throw new Error(`Invalid audio request JSON: ${error.message}`);
     }
-    requireObject(value, 'Audio activation');
+    requireObject(value, 'Audio request');
+    if (value.type === 'menu-open') {
+        rejectUnknown(value, new Set(['version', 'type']), 'Audio menu-open request');
+        if (value.version !== 2)
+            throw new Error('Audio menu-open request version is invalid');
+        return Object.freeze({type: 'menu-open'});
+    }
     rejectUnknown(
         value,
         new Set(['version', 'type', 'id', 'requestId']),
@@ -98,20 +118,70 @@ export function parseActivation(raw) {
         value.requestId < 1 ||
         value.requestId > 2_147_483_647)
         throw new Error('Audio activation requestId is invalid');
-    return Object.freeze({id: value.id, requestId: value.requestId});
+    return Object.freeze({type: 'activate', id: value.id, requestId: value.requestId});
 }
 
 function normalizeState(state, config) {
     requireObject(state, 'Audio state');
     const parsedConfig = parseAudioConfig(config);
     const aliases = parsedConfig.aliases;
+    const outputs = normalizeDevices(state.outputs, aliases, 'output');
+    const inputs = normalizeDevices(state.inputs, aliases, 'input');
+    const defaultOutputId = normalizeDefault(state.defaultOutputId);
+    const defaultInputId = normalizeDefault(state.defaultInputId);
     return {
-        outputs: normalizeDevices(state.outputs, aliases, 'output'),
-        inputs: normalizeDevices(state.inputs, aliases, 'input'),
-        defaultOutputId: normalizeDefault(state.defaultOutputId),
-        defaultInputId: normalizeDefault(state.defaultInputId),
+        outputs,
+        inputs,
+        defaultOutputId,
+        defaultInputId,
+        routes: normalizeRoutes(state.routes ?? [], outputs, inputs),
         nameLimit: parsedConfig.maxPanelNameChars,
     };
+}
+
+function normalizeRoutes(values, outputs, inputs) {
+    if (!Array.isArray(values))
+        throw new Error('Audio application routes must be an array');
+    const devices = {
+        output: new Map(outputs.map(device => [device.id, device])),
+        input: new Map(inputs.map(device => [device.id, device])),
+    };
+    const seen = new Set();
+    const routes = [];
+    for (const [index, value] of values.entries()) {
+        requireObject(value, `Audio application route ${index}`);
+        rejectUnknown(
+            value,
+            new Set(['streamId', 'direction', 'application', 'deviceId']),
+            `Audio application route ${index}`);
+        const streamId = String(value.streamId);
+        const deviceId = String(value.deviceId);
+        requireText(streamId, 96, `Audio application route ${index} stream ID`);
+        requireText(deviceId, 96, `Audio application route ${index} device ID`);
+        requireText(value.application, 128, `Audio application route ${index} application`);
+        if (value.direction !== 'output' && value.direction !== 'input')
+            throw new Error(`Audio application route ${index} direction is invalid`);
+        const device = devices[value.direction].get(deviceId);
+        if (device === undefined)
+            continue;
+        const key = `${value.direction}:${streamId}:${deviceId}`;
+        if (seen.has(key))
+            continue;
+        seen.add(key);
+        routes.push({
+            streamId,
+            deviceId,
+            direction: value.direction,
+            application: value.application.trim(),
+            device: device.label,
+        });
+    }
+    return routes.sort((left, right) =>
+        left.application.localeCompare(right.application) ||
+        left.direction.localeCompare(right.direction) ||
+        left.streamId.localeCompare(right.streamId) ||
+        left.deviceId.localeCompare(right.deviceId))
+        .slice(0, MAX_ACTIVE_ROUTES);
 }
 
 function normalizeDevices(values, aliases, context) {
@@ -190,6 +260,20 @@ function deviceActions(prefix, devices, selectedId) {
         text: device.label,
         selected: device.id === selectedId,
     }));
+}
+
+function routeLabels(state) {
+    return state.routes.map(route => {
+        const defaultId = route.direction === 'output' ?
+            state.defaultOutputId : state.defaultInputId;
+        const mismatch = defaultId !== null && route.deviceId !== defaultId ?
+            ' (not default)' : '';
+        const routeText = route.direction === 'output' ?
+            `playback → ${route.device}` : `microphone ← ${route.device}`;
+        return label(
+            `route:${route.direction}:${route.streamId}:${route.deviceId}`,
+            `${route.application} — ${routeText}${mismatch}`);
+    });
 }
 
 function panelName(value, maximum) {

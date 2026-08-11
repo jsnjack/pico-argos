@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import {parsePorts, portKey} from './ports.js';
+import {isDevicePortVisible, parsePorts, portKey} from './ports.js';
 
 function assertEqual(actual, expected, message) {
     if (JSON.stringify(actual) !== JSON.stringify(expected))
@@ -69,5 +69,18 @@ assertEqual(sharedNode, {
     choices: 2,
     availability: 'unknown',
 }, 'one unavailable connector does not hide a shared node');
+
+assertEqual(
+    isDevicePortVisible({availability: 'no'}, 57, '57'),
+    true,
+    'effective default remains visible when availability is stale');
+assertEqual(
+    isDevicePortVisible({availability: 'no'}, 56, '57'),
+    false,
+    'unavailable non-default remains hidden');
+assertEqual(
+    isDevicePortVisible(null, 56, '57'),
+    true,
+    'device without port metadata remains visible');
 
 print('ok - audio route availability is parsed and combined');

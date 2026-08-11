@@ -59,6 +59,11 @@ export function portKey(deviceId, cardDevice, direction) {
     return `${deviceId}:${cardDevice}:${direction}`;
 }
 
+/** Keeps the effective default visible despite stale port availability. */
+export function isDevicePortVisible(port, nodeId, defaultNodeId) {
+    return port?.availability !== 'no' || String(nodeId) === String(defaultNodeId);
+}
+
 function mergeAvailability(current, value) {
     const next = value === 'yes' || value === 'no' ? value : 'unknown';
     if (current === undefined)
