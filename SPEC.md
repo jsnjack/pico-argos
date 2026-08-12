@@ -1152,6 +1152,17 @@ Required behavior:
 - Menu contains location, current/apparent temperature, two-hour temperature,
   UV index, rain description, and nonzero rain timeline entries.
 - Preserve the last valid forecast on transient failure.
+- Resolve the request location from the first available source: explicit
+  coordinates in `weather.json`, one bounded GeoClue detection, the cached last
+  detection, then configured fallback coordinates. Absent every source, omit
+  coordinates and accept the service default.
+- Bound one detection by `detectTimeoutMs` and treat an unavailable,
+  unauthorized, or unresponsive location service as a miss rather than a
+  failure. Detection never delays a refresh beyond that deadline.
+- Cache one detected coordinate pair below the XDG cache directory for
+  `cacheTtlMs`, so a routine refresh performs no location lookup.
+- Request `city` accuracy and round stored and transmitted coordinates to four
+  decimal places.
 
 The migrated script invokes `jq` once to transform the response directly into
 the protocol document. Blank output lines are replaced by explicit separator
