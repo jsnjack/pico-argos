@@ -1168,9 +1168,10 @@ Required behavior:
 - Request `city` accuracy and round stored and transmitted coordinates to four
   decimal places.
 
-The migrated script invokes `jq` once to transform the response directly into
-the protocol document. Blank output lines are replaced by explicit separator
-items. Images and markup are unnecessary.
+The migrated plugin issues one bounded HTTPS request through libsoup and parses
+that response once in process into the protocol document, spawning no helper
+program. Blank output lines are replaced by explicit separator items. Images
+and markup are unnecessary.
 
 ### 13.6 Audio devices
 
