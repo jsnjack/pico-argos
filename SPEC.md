@@ -1153,9 +1153,13 @@ Required behavior:
   UV index, rain description, and nonzero rain timeline entries.
 - Preserve the last valid forecast on transient failure.
 - Resolve the request location from the first available source: explicit
-  coordinates in `weather.json`, one bounded GeoClue detection, the cached last
-  detection, then configured fallback coordinates. Absent every source, omit
-  coordinates and accept the service default.
+  coordinates in `weather.json`, the city pinned in GNOME Weather, one bounded
+  GeoClue detection, the cached last detection, then configured fallback
+  coordinates. Absent every source, omit coordinates and accept the service
+  default.
+- Read `org.gnome.shell.weather` only when its `automatic-location` is false,
+  because an automatic value repeats what the location service already reports.
+  Treat an absent schema, absent key, or unexpected value as no location.
 - Bound one detection by `detectTimeoutMs` and treat an unavailable,
   unauthorized, or unresponsive location service as a miss rather than a
   failure. Detection never delays a refresh beyond that deadline.

@@ -13,6 +13,7 @@ import {
     MAX_CACHE_BYTES,
     MAX_CONFIG_BYTES,
     parseCachedLocation,
+    parseGnomeLocations,
     parseWeatherConfig,
     resolveLocation,
 } from './location.js';
@@ -26,17 +27,26 @@ const LOCATION_INTERFACE = 'org.freedesktop.GeoClue2.Location';
 const PROPERTIES_INTERFACE = 'org.freedesktop.DBus.Properties';
 const ACCURACY_LEVEL_CITY = 4;
 const DESKTOP_ID = 'pico-argos-weather';
+const GNOME_WEATHER_SCHEMA = 'org.gnome.shell.weather';
 
 try {
     const config = loadConfiguration();
     const nowMs = Date.now();
-    const cached = config.location === 'auto' ?
-        loadCachedLocation(config, nowMs) : null;
-    const detected = config.location === 'auto' && cached === null ?
-        await detectLocation(config.detectTimeoutMs) : null;
-    if (detected !== null)
-        storeCachedLocation(detected, nowMs);
-    const resolved = resolveLocation({config, detected, cached});
+    let gnome = null;
+    let cached = null;
+    let detected = null;
+    if (config.location === 'auto') {
+        gnome = config.useGnomeLocation ? readGnomeLocation() : null;
+        if (gnome === null) {
+            cached = loadCachedLocation(config, nowMs);
+            if (cached === null) {
+                detected = await detectLocation(config.detectTimeoutMs);
+                if (detected !== null)
+                    storeCachedLocation(detected, nowMs);
+            }
+        }
+    }
+    const resolved = resolveLocation({config, gnome, detected, cached});
 
     const message = Soup.Message.new(
         'GET', glanceUri(WEATHER_SOURCE, resolved.coordinates));
@@ -52,6 +62,28 @@ try {
 } catch (error) {
     printerr(`[weather] ${error.message}`);
     System.exit(1);
+}
+
+/**
+ * Reads the city pinned in GNOME Weather. A location is only meaningful here
+ * when the user turned automatic detection off, because otherwise the value is
+ * whatever the location service last reported and carries nothing new.
+ */
+function readGnomeLocation() {
+    try {
+        const schema = Gio.SettingsSchemaSource.get_default()
+            ?.lookup(GNOME_WEATHER_SCHEMA, true);
+        if (!schema || !schema.has_key('locations') ||
+            !schema.has_key('automatic-location'))
+            return null;
+        const settings = new Gio.Settings({settings_schema: schema});
+        if (settings.get_boolean('automatic-location'))
+            return null;
+        return parseGnomeLocations(
+            settings.get_value('locations').recursiveUnpack());
+    } catch {
+        return null;
+    }
 }
 
 /**

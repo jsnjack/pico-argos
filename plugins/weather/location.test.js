@@ -7,6 +7,7 @@ import {
     glanceUri,
     parseCachedLocation,
     parseCoordinates,
+    parseGnomeLocations,
     parseWeatherConfig,
     resolveLocation,
 } from './location.js';
@@ -36,6 +37,7 @@ assertEqual(defaults, {
     fallback: null,
     cacheTtlMs: DEFAULT_CACHE_TTL_MS,
     detectTimeoutMs: DEFAULT_DETECT_TIMEOUT_MS,
+    useGnomeLocation: true,
 }, 'default weather configuration');
 assertEqual(
     glanceUri(SOURCE, resolveLocation({config: defaults}).coordinates),
@@ -127,6 +129,46 @@ assertEqual(
     'a malformed cache entry is rejected');
 assertEqual(parseCachedLocation(null, now, DEFAULT_CACHE_TTL_MS), null,
     'an absent cache is rejected');
+
+// GNOME stores one serialized GWeatherLocation with radian coordinates.
+const gnomeAmsterdam = [
+    [2, ['Amsterdam', 'EHAM', false,
+        [[0.912_807_198_793_034_18, 0.083_194_033_496_160_544]],
+        [[0.912_807_198_793_034_18, 0.083_194_033_496_160_544]]]],
+];
+assertEqual(
+    parseGnomeLocations(gnomeAmsterdam),
+    {latitude: 52.3, longitude: 4.7667},
+    'GNOME radian coordinates are converted to degrees');
+for (const malformed of [
+    null, [], 'x', [[]], [[2]], [[2, ['Name', 'CODE', false]]],
+    [[2, ['Name', 'CODE', false, []]]],
+    [[2, ['Name', 'CODE', false, [[0.1]]]]],
+    [[2, ['Name', 'CODE', false, [['x', 'y']]]]],
+    [[2, ['Name', 'CODE', false, [[99, 0]]]]],
+])
+    assertEqual(parseGnomeLocations(malformed), null,
+        `malformed GNOME location is ignored: ${JSON.stringify(malformed)}`);
+
+// A pinned GNOME city outranks detection, the cache, and the fallback.
+assertEqual(resolveLocation({
+    config: auto,
+    gnome: {latitude: 53.9006, longitude: 27.559},
+    detected: {latitude: 1, longitude: 1},
+    cached: {latitude: 2, longitude: 2},
+}), {
+    coordinates: {latitude: 53.9006, longitude: 27.559},
+    source: 'gnome-weather',
+}, 'a pinned GNOME city wins over detection');
+assertEqual(resolveLocation({
+    config: fixed,
+    gnome: {latitude: 53.9006, longitude: 27.559},
+}).source, 'configured', 'an explicit override still outranks GNOME');
+assertEqual(
+    parseWeatherConfig({useGnomeLocation: false}).useGnomeLocation,
+    false,
+    'the GNOME source is opt-out');
+assertInvalid(() => parseWeatherConfig({useGnomeLocation: 'yes'}), /boolean/);
 
 assertInvalid(() => glanceUri('http://weather.example', null), /source URI/);
 

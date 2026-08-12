@@ -11,6 +11,7 @@ const CONFIG_KEYS = new Set([
     'fallback',
     'cacheTtlMs',
     'detectTimeoutMs',
+    'useGnomeLocation',
 ]);
 const COORDINATE_KEYS = new Set(['latitude', 'longitude']);
 const CACHE_KEYS = new Set(['latitude', 'longitude', 'updatedMs']);
@@ -23,6 +24,7 @@ export function parseWeatherConfig(value) {
             fallback: null,
             cacheTtlMs: DEFAULT_CACHE_TTL_MS,
             detectTimeoutMs: DEFAULT_DETECT_TIMEOUT_MS,
+            useGnomeLocation: true,
         });
     }
     requireObject(value, 'configuration');
@@ -42,8 +44,51 @@ export function parseWeatherConfig(value) {
     const detectTimeoutMs = requireRange(
         value.detectTimeoutMs ?? DEFAULT_DETECT_TIMEOUT_MS, 0, 15_000,
         'detectTimeoutMs');
+    const useGnomeLocation = value.useGnomeLocation ?? true;
+    if (typeof useGnomeLocation !== 'boolean')
+        throw new Error('Weather useGnomeLocation must be boolean');
 
-    return Object.freeze({location, fallback, cacheTtlMs, detectTimeoutMs});
+    return Object.freeze({
+        location,
+        fallback,
+        cacheTtlMs,
+        detectTimeoutMs,
+        useGnomeLocation,
+    });
+}
+
+/**
+ * Extracts coordinates from a decoded `org.gnome.shell.weather` locations
+ * value. GNOME serializes one GWeatherLocation per entry and stores its
+ * coordinates in radians. Any unexpected shape yields null rather than
+ * throwing, because the setting belongs to another application.
+ */
+export function parseGnomeLocations(value) {
+    if (!Array.isArray(value) || value.length === 0)
+        return null;
+    const entry = value[0];
+    if (!Array.isArray(entry) || entry.length < 2)
+        return null;
+    const place = entry[1];
+    if (!Array.isArray(place) || place.length < 4)
+        return null;
+    const coordinates = place[3];
+    if (!Array.isArray(coordinates) || coordinates.length === 0)
+        return null;
+    const pair = coordinates[0];
+    if (!Array.isArray(pair) || pair.length < 2)
+        return null;
+    const [latitude, longitude] = pair;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude))
+        return null;
+    try {
+        return parseCoordinates({
+            latitude: latitude * 180 / Math.PI,
+            longitude: longitude * 180 / Math.PI,
+        }, 'GNOME location');
+    } catch {
+        return null;
+    }
 }
 
 /** Validates and rounds one coordinate pair. */
@@ -97,9 +142,16 @@ export function cacheDocument(coordinates, nowMs) {
  * Chooses coordinates from the configured, detected, and cached sources.
  * A null result requests the service default, preserving legacy behavior.
  */
-export function resolveLocation({config, detected = null, cached = null}) {
+export function resolveLocation({
+    config,
+    gnome = null,
+    detected = null,
+    cached = null,
+}) {
     if (config.location !== 'auto')
         return Object.freeze({coordinates: config.location, source: 'configured'});
+    if (gnome !== null)
+        return Object.freeze({coordinates: gnome, source: 'gnome-weather'});
     if (detected !== null)
         return Object.freeze({coordinates: detected, source: 'detected'});
     if (cached !== null)
