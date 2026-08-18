@@ -23,6 +23,7 @@ const INPUT_READ_BYTES = 1_024;
 const MAX_INPUT_LINE_BYTES = 4_096;
 const MAX_ROUTE_DUMP_BYTES = 8 * 1_024 * 1_024;
 const STATE_COALESCE_MS = 50;
+const PORT_DUMP_INTERVAL_MS = 750;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', {fatal: true});
@@ -39,13 +40,15 @@ let lastSnapshot = null;
 let actionTargets = new Map();
 let pendingInput = new Uint8Array();
 let cardPorts = new Map();
-let portRefresh = null;
+let portDumpUs = Number.NEGATIVE_INFINITY;
+let portDumpRunning = false;
+let portDumpPending = false;
 let portsReported = false;
-let stateSourceId = 0;
 let stateForce = false;
-let heartbeatSourceId = 0;
 let fatalError = null;
+const sources = {state: 0, heartbeat: 0, ports: 0};
 const signalIds = [];
+const deviceSignalIds = new Map();
 
 try {
     configuration = loadConfiguration();
@@ -64,17 +67,35 @@ try {
     manager = Wp.ObjectManager.new();
     manager.add_interest_full(Wp.ObjectInterest.new_type(Wp.Node.$gtype));
     manager.add_interest_full(Wp.ObjectInterest.new_type(Wp.Link.$gtype));
+    manager.add_interest_full(Wp.ObjectInterest.new_type(Wp.Device.$gtype));
     manager.request_object_features(
         Wp.Node.$gtype,
         Wp.ProxyFeatures.PIPEWIRE_OBJECT_FEATURES_MINIMAL);
     manager.request_object_features(
         Wp.Link.$gtype,
         Wp.ProxyFeatures.PIPEWIRE_OBJECT_FEATURES_MINIMAL);
+    manager.request_object_features(
+        Wp.Device.$gtype,
+        Wp.ProxyFeatures.PIPEWIRE_OBJECT_FEATURES_MINIMAL |
+        Wp.ProxyFeatures.PIPEWIRE_OBJECT_FEATURE_PARAM_ROUTE);
     await installObjectManager(core, manager);
 
-    connect(manager, 'object-added', () => scheduleSnapshot());
-    connect(manager, 'object-removed', () => scheduleSnapshot());
+    connect(manager, 'object-added', (_manager, object) => {
+        watchDeviceRoutes(object);
+        scheduleSnapshot();
+        schedulePortDump();
+    });
+    connect(manager, 'object-removed', (_manager, object) => {
+        forgetDeviceRoutes(object);
+        scheduleSnapshot();
+        schedulePortDump();
+    });
     connect(manager, 'objects-changed', () => scheduleSnapshot());
+    const initial = manager.new_iterator();
+    initial.foreach(object => {
+        watchDeviceRoutes(object);
+        return true;
+    });
     connect(defaultNodes, 'changed', () => scheduleSnapshot());
     connect(core, 'disconnected', () => fail(
         new Error('WirePlumber core disconnected')));
@@ -82,7 +103,7 @@ try {
     await refreshPorts();
     emitSnapshot(true);
     readInput();
-    heartbeatSourceId = GLib.timeout_add_seconds(
+    sources.heartbeat = GLib.timeout_add_seconds(
         GLib.PRIORITY_DEFAULT,
         HEARTBEAT_SECONDS,
         () => {
@@ -104,8 +125,9 @@ try {
     fatalError = error;
 } finally {
     cancellable.cancel();
-    removeSource('stateSourceId');
-    removeSource('heartbeatSourceId');
+    removeSource('state');
+    removeSource('heartbeat');
+    removeSource('ports');
     for (const [object, id] of signalIds) {
         if (object === null) {
             if (GLib.MainContext.default().find_source_by_id(id) !== null)
@@ -115,6 +137,11 @@ try {
         }
     }
     signalIds.length = 0;
+    for (const [object, id] of deviceSignalIds) {
+        if (GObject.signal_handler_is_connected(object, id))
+            GObject.Object.prototype.disconnect.call(object, id);
+    }
+    deviceSignalIds.clear();
     core?.disconnect();
 }
 
@@ -126,6 +153,38 @@ if (fatalError !== null) {
 function connect(object, signal, callback) {
     const id = GObject.Object.prototype.connect.call(object, signal, callback);
     signalIds.push([object, id]);
+}
+
+/**
+ * Subscribes to one card's route parameters.
+ *
+ * Connecting a jack changes no node and no link: the card keeps publishing the
+ * same sink and source nodes and only flips the `available` flag of a route on
+ * its device. Without this subscription the plugin observes nothing at all, so
+ * a headset stays hidden and the panel keeps naming the previous device until
+ * an unrelated event or a menu open forces a fresh snapshot.
+ */
+function watchDeviceRoutes(object) {
+    if (!(object instanceof Wp.Device) || deviceSignalIds.has(object))
+        return;
+    deviceSignalIds.set(
+        object,
+        GObject.Object.prototype.connect.call(
+            object,
+            'params-changed',
+            (_device, parameter) => {
+                if (parameter === 'Route' || parameter === 'EnumRoute')
+                    schedulePortDump();
+            }));
+}
+
+function forgetDeviceRoutes(object) {
+    const id = deviceSignalIds.get(object);
+    if (id === undefined)
+        return;
+    deviceSignalIds.delete(object);
+    if (GObject.signal_handler_is_connected(object, id))
+        GObject.Object.prototype.disconnect.call(object, id);
 }
 
 function emitSnapshot(force = false) {
@@ -140,20 +199,21 @@ function emitSnapshot(force = false) {
 
 function scheduleSnapshot(force = false) {
     stateForce ||= force;
-    if (stateSourceId !== 0)
+    if (sources.state !== 0)
         return;
-    stateSourceId = GLib.timeout_add(
+    sources.state = GLib.timeout_add(
         GLib.PRIORITY_DEFAULT,
         STATE_COALESCE_MS,
         () => {
-            stateSourceId = 0;
+            sources.state = 0;
             const shouldForce = stateForce;
             stateForce = false;
-            refreshPorts().then(() => {
-                if (cancellable.is_cancelled())
-                    return;
-                emitSnapshot(shouldForce);
-            }).catch(error => fail(error));
+            try {
+                if (!cancellable.is_cancelled())
+                    emitSnapshot(shouldForce);
+            } catch (error) {
+                fail(error);
+            }
             return GLib.SOURCE_REMOVE;
         });
 }
@@ -296,19 +356,57 @@ function firstProperty(node, keys) {
  * costs port naming, never the snapshot.
  */
 function refreshPorts() {
-    if (portRefresh !== null)
-        return portRefresh;
-    portRefresh = dumpPorts().then(ports => {
+    portDumpUs = GLib.get_monotonic_time();
+    return dumpPorts().then(ports => {
         cardPorts = ports;
     }).catch(error => {
         if (!portsReported && !cancellable.is_cancelled()) {
             portsReported = true;
             printerr(`[audio-devices] Port names unavailable: ${error.message}`);
         }
-    }).finally(() => {
-        portRefresh = null;
     });
-    return portRefresh;
+}
+
+/**
+ * Requests one throttled `pw-dump` and re-emits whatever it changes.
+ *
+ * A device publishes volume through the same Route parameter as jack state, so
+ * one volume ramp signals as often as the slider moves while changing nothing
+ * this plugin shows. Spacing the children keeps that storm at one short-lived
+ * process per 750 ms, and a change arriving while a dump runs queues exactly
+ * one more, because the running dump sampled the graph before that change.
+ * Jack events are human-scale, so the delay is invisible; the live node and
+ * default-device state never waits on a dump.
+ */
+function schedulePortDump() {
+    if (portDumpRunning) {
+        portDumpPending = true;
+        return;
+    }
+    if (sources.ports !== 0 || cancellable.is_cancelled())
+        return;
+    const readyUs = portDumpUs + PORT_DUMP_INTERVAL_MS * 1_000;
+    const waitUs = readyUs - GLib.get_monotonic_time();
+    sources.ports = GLib.timeout_add(
+        GLib.PRIORITY_DEFAULT,
+        waitUs <= 0 ? 0 : Math.ceil(waitUs / 1_000),
+        () => {
+            sources.ports = 0;
+            if (cancellable.is_cancelled())
+                return GLib.SOURCE_REMOVE;
+            portDumpRunning = true;
+            refreshPorts().then(() => {
+                if (!cancellable.is_cancelled())
+                    scheduleSnapshot();
+            }).catch(error => fail(error)).finally(() => {
+                portDumpRunning = false;
+                if (!portDumpPending)
+                    return;
+                portDumpPending = false;
+                schedulePortDump();
+            });
+            return GLib.SOURCE_REMOVE;
+        });
 }
 
 function dumpPorts() {
@@ -383,7 +481,10 @@ function handleRequest(raw) {
         throw new Error(`Rejecting core input: ${error.message}`);
     }
     if (request.type === 'menu-open') {
+        // Answer immediately from the live graph, then follow up only if freshly
+        // dumped route data actually changes the snapshot.
         emitSnapshot(true);
+        schedulePortDump();
         return;
     }
     const target = actionTargets.get(request.id);
@@ -491,12 +592,8 @@ function fail(error) {
 }
 
 function removeSource(name) {
-    const id = name === 'stateSourceId' ? stateSourceId : heartbeatSourceId;
-    if (id === 0)
+    if (sources[name] === 0)
         return;
-    GLib.source_remove(id);
-    if (name === 'stateSourceId')
-        stateSourceId = 0;
-    else
-        heartbeatSourceId = 0;
+    GLib.source_remove(sources[name]);
+    sources[name] = 0;
 }

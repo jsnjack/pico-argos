@@ -19,7 +19,7 @@ A card that exposes several ports for one device is named by its active port
 ("Line Out", "Headphones"), because the connector is what distinguishes the
 alternatives. A card that exposes exactly one keeps its device name, which is
 the more specific identity there — an HDMI card reports the connected monitor,
-while its only port is always called "HDMI / DisplayPort". Port names come from
+while its only port is always called "HDMI / DisplayPort". Port names and route availability come from
 `pw-dump`, run once per device change, because GJS cannot read WirePlumber's
 route parameters; without that binary every device falls back to its device
 name.
@@ -36,9 +36,11 @@ $XDG_CONFIG_HOME/pico-argos/audio-devices.json
 `aliases` maps exact PipeWire `node.name` values to concise panel/menu names.
 Use `wpctl status -n` to inspect node names.
 
-The plugin reacts to device hotplug, default-node changes, and application-link
-changes, emits a heartbeat every five seconds, and treats action IDs as
-session-local. Opening its menu also requests a fresh authoritative snapshot.
+The plugin reacts to device hotplug, default-node changes, card route changes,
+and application-link changes, emits a heartbeat every five seconds, and treats
+action IDs as session-local. Connecting a jack changes neither a node nor a
+link, only a route's availability on the card, so the plugin subscribes to each
+device's route parameters as well. Opening its menu also requests a fresh authoritative snapshot.
 If a device disappears before activation, the request fails safely and the
 plugin emits another fresh snapshot. Routes that PipeWire explicitly marks
 unavailable are omitted; routes with unknown availability remain visible.

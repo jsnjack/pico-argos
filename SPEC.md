@@ -1187,8 +1187,9 @@ Required behavior:
   default and keep them read-only.
 - Switch only the system defaults. Volume, mute, profiles, ports, and
   per-application routing are outside this plugin.
-- React to WirePlumber default changes and PipeWire device hotplug without
-  polling or recurring child processes.
+- React to WirePlumber default changes, PipeWire device hotplug, and card route
+  changes such as jack connection, without polling or recurring child
+  processes.
 
 The reference plugin uses the installed WirePlumber 0.5 GObject API and keeps
 all audio-domain logic outside the extension.
