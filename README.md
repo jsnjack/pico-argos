@@ -32,6 +32,7 @@ outside the extension package:
 | [Audio devices](./plugins/audio-devices/README.md) | Current output/microphone and quick default-device switching |
 | [Dependabot](./plugins/dependabot/README.md) | GitHub dependency alerts |
 | [Pull reviews](./plugins/pull-reviews/README.md) | Requested GitHub reviews |
+| [Taskbox](./plugins/taskbox/README.md) | The current task, today's remaining count, and the day's agenda |
 | [VPN](./plugins/vpn/README.md) | VPN protection and location |
 | [Weather](./plugins/weather/README.md) | Temperature, rain, and conditions |
 

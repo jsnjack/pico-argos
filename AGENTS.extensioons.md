@@ -349,6 +349,7 @@ reference defaults are compatibility constraints:
 | audio devices | WirePlumber 0.5 GObject API | compact current output/microphone; native selected actions switch system defaults without polling |
 | Dependabot | GitHub Dependabot alerts API | hidden at zero; urgent-update symbolic icon and count; up to five direct alert links |
 | pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
+| Taskbox | local `taskbox agenda` JSON (never the Todoist API) | current task in a ±10-minute accent window; remaining-count checkbox, warning while overdue; agenda menu with stable `task:<key>` IDs |
 | VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; larger monochrome `☠︎` skull-and-crossbones glyph text; private country/city details with no public IP |
 | weather | `https://weather.yauhen.cc/api/v1/glance` | center placement, temperature/rain dots/condition icon, concise details, and bounded rain timing |
 

@@ -1,0 +1,16 @@
+{
+  "manifestVersion": 1,
+  "id": "taskbox",
+  "mode": "oneshot",
+  "command": ["gjs", "-m", "./run.js"],
+  "intervalMs": 60000,
+  "timeoutMs": 10000,
+  "refreshOnOpen": true,
+  "position": "center",
+  "order": 50,
+  "nice": 10,
+  "reserveTextChars": 32,
+  "passEnvironment": [],
+  "failurePolicy": "hide",
+  "maxStaleMs": 300000
+}
