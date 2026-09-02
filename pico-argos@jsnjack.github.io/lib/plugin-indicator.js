@@ -522,6 +522,14 @@ export class ProductionRenderer {
     _positionIndex(plugin) {
         if (plugin.manifest.position === 'left')
             return panelBox('left').get_n_children();
+        // Center plugins append after what the Shell already centers — the
+        // clock — so they read as companions to it, matching where status-area
+        // extensions conventionally land; _reorder then settles them among
+        // themselves. Index 0 would put them left of the clock. Right-box
+        // plugins keep index-first placement so system indicators stay
+        // rightmost.
+        if (plugin.manifest.position === 'center')
+            return panelBox('center').get_n_children();
         return [...this._entries.values()]
             .filter(entry => entry.plugin.manifest.position === plugin.manifest.position)
             .sort((left, right) => compareManifests(left.plugin.manifest, right.plugin.manifest))

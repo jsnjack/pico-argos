@@ -13,6 +13,10 @@ The menu lists the agenda: the overdue pile with when each entry slipped,
 today's tasks in time order with a `↻` mark on recurring ones, and how many
 were already finished today.
 
+The indicator sits in the center of the panel, immediately right of the
+clock (`order` 10, ahead of weather's 40): what is due next belongs beside
+what time it is.
+
 ## Data source
 
 The plugin runs `taskbox agenda`, which prints a versioned JSON document from

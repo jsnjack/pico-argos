@@ -7,7 +7,7 @@
   "timeoutMs": 10000,
   "refreshOnOpen": true,
   "position": "center",
-  "order": 50,
+  "order": 10,
   "nice": 10,
   "reserveTextChars": 32,
   "passEnvironment": [],
