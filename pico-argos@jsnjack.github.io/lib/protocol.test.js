@@ -47,6 +47,18 @@ assertEqual(valid.snapshot.menu.length, 3, 'menu length');
 if (!Object.isFrozen(valid.snapshot) || !Object.isFrozen(valid.snapshot.menu[0]))
     throw new Error('Validated semantic snapshot must be immutable');
 
+const positive = parseProtocolMessage(JSON.stringify({
+    version: 1,
+    type: 'snapshot',
+    panel: {
+        icon: 'checkbox-checked-symbolic',
+        severity: 'positive',
+        accessibleName: 'All clear',
+    },
+    menu: [],
+}));
+assertEqual(positive.snapshot.panel.severity, 'positive', 'positive severity');
+
 assertEqual(parseProtocolMessage(
     '{"version":1,"type":"heartbeat"}',
     {allowHeartbeat: true}),

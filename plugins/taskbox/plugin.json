@@ -6,7 +6,7 @@
   "intervalMs": 60000,
   "timeoutMs": 10000,
   "refreshOnOpen": true,
-  "position": "center",
+  "position": "center-end",
   "order": 10,
   "nice": 10,
   "reserveTextChars": 32,

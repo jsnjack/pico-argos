@@ -109,10 +109,16 @@ assertInvalid({refreshOnOpen: true}, /unknown/, 'stream');
 assertInvalid({manifestVersion: 2}, /protocolVersion/, 'stream');
 assertInvalid({manifestVersion: 2, protocolVersion: 1}, /protocolVersion/, 'stream');
 
+const centered = validateManifest(
+    {...oneShot, position: 'center-end'}, '/tmp/plugins/test', 'test');
+assertEqual(centered.position, 'center-end', 'center-end position');
+
 const ordered = [
     {...normalizedOneShot, id: 'z', position: 'right', order: 1},
+    {...normalizedOneShot, id: 'c', position: 'center-end', order: 1},
     {...normalizedOneShot, id: 'b', position: 'left', order: 2},
     {...normalizedOneShot, id: 'a', position: 'left', order: 2},
 ].sort(compareManifests);
-assertEqual(ordered.map(item => item.id), ['a', 'b', 'z'], 'manifest ordering');
+assertEqual(
+    ordered.map(item => item.id), ['a', 'b', 'c', 'z'], 'manifest ordering');
 print('ok - manifests are strictly validated, normalized, and ordered');

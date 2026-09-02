@@ -163,8 +163,10 @@ The version 1 rules are:
 - `command` is an argv array, not a shell string: 1–32 elements, each at most
   4,096 UTF-8 bytes and at most 16 KiB total. A path is resolved inside the
   plugin directory; a bare program uses the runtime's minimal `PATH`.
-- `position` is `left`, `center`, or `right`; ordering is by position, integer
-  `order`, then ID.
+- `position` is `left`, `center`, `center-end`, or `right`; ordering is by
+  position, integer `order`, then ID. The two center values sit either side of
+  what the Shell centers itself (the clock): `center` before it, `center-end`
+  after it.
 - `nice` is `null` or 0–19 and defaults to 10. `null` disables the niceness
   wrapper.
 - `reserveTextChars` is 0–128. A nonzero value is a hard Unicode-scalar limit,
@@ -276,7 +278,8 @@ Write one compact UTF-8 JSON object. A snapshot example is:
   larger, system-accent-colored text (when `severity` is `normal`); like every
   appearance value, the actual color and size are extension-owned CSS, never
   a raw value a plugin supplies.
-- `severity` is `normal`, `warning`, or `critical`.
+- `severity` is `normal`, `positive`, `warning`, or `critical`. `positive` is
+  the all-clear green; like every severity color it is extension-owned CSS.
 - `accessibleName` is mandatory for icon-only state and should explain terse
   glyphs or abbreviations.
 
@@ -349,7 +352,7 @@ reference defaults are compatibility constraints:
 | audio devices | WirePlumber 0.5 GObject API | compact current output/microphone; native selected actions switch system defaults without polling |
 | Dependabot | GitHub Dependabot alerts API | hidden at zero; urgent-update symbolic icon and count; up to five direct alert links |
 | pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
-| Taskbox | local `taskbox agenda` JSON (never the Todoist API) | current task in a ±10-minute accent window; remaining-count checkbox, warning while overdue; agenda menu with stable `task:<key>` IDs |
+| Taskbox | local `taskbox agenda` JSON (never the Todoist API) | immediately right of the clock (`center-end`); current task in a ±10-minute accent window; remaining-count checkbox, warning while overdue, positive-green tick when clear; agenda menu with stable `task:<key>` IDs |
 | VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; larger monochrome `☠︎` skull-and-crossbones glyph text; private country/city details with no public IP |
 | weather | `https://weather.yauhen.cc/api/v1/glance` | center placement, temperature/rain dots/condition icon, concise details, and bounded rain timing |
 

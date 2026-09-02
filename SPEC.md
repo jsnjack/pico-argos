@@ -537,7 +537,9 @@ Manifest rules:
   10; and `maxBytesPerMinute` defaults to 262,144 and is 65,536 through
   1,048,576. Protocol version 2 streams may set boolean `refreshOnOpen`, which
   defaults to `false`; version 1 streams reject it.
-- `position` is `left`, `center`, or `right`.
+- `position` is `left`, `center`, `center-end`, or `right`. Both center
+  values share the Shell's center box, split around what the Shell already
+  centers there (the clock): `center` precedes it, `center-end` follows it.
 - `order` is an integer. Ordering is `(position, order, id)`.
 - Left-positioned plugin indicators follow the Shell's built-in left-side
   controls, preserving Activities as the leading panel item.
@@ -624,7 +626,9 @@ Panel rules:
   renders larger text tinted with the desktop's own system accent color when
   `severity` is `normal`; the color itself is always extension-owned and
   theme-derived, never a value a plugin supplies directly.
-- `severity` is `normal`, `warning`, or `critical`.
+- `severity` is `normal`, `positive`, `warning`, or `critical`. `positive`
+  is the extension-owned all-clear green, for a state worth showing precisely
+  because nothing needs attention.
 - `accessibleName` is required if text alone does not explain the state.
 - Markup is never interpreted.
 

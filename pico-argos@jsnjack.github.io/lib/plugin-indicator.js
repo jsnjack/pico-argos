@@ -15,6 +15,7 @@ import {compareManifests} from './manifest.js';
 const PANEL_BOXES = Object.freeze({
     left: 'left',
     center: 'center',
+    'center-end': 'center',
     right: 'right',
 });
 const APPROACH_CLASSES = Object.freeze({
@@ -25,6 +26,7 @@ const APPROACH_CLASSES = Object.freeze({
 });
 const SEVERITY_CLASSES = Object.freeze({
     normal: 'pico-argos-severity-normal',
+    positive: 'pico-argos-severity-positive',
     warning: 'pico-argos-severity-warning',
     critical: 'pico-argos-severity-critical',
 });
@@ -522,14 +524,13 @@ export class ProductionRenderer {
     _positionIndex(plugin) {
         if (plugin.manifest.position === 'left')
             return panelBox('left').get_n_children();
-        // Center plugins append after what the Shell already centers — the
-        // clock — so they read as companions to it, matching where status-area
-        // extensions conventionally land; _reorder then settles them among
-        // themselves. Index 0 would put them left of the clock. Right-box
-        // plugins keep index-first placement so system indicators stay
-        // rightmost.
-        if (plugin.manifest.position === 'center')
-            return panelBox('center').get_n_children();
+        // Both center positions share the Shell's center box, split around
+        // what the Shell already centers there — the clock. 'center' plugins
+        // take index-first placement before it; 'center-end' plugins append
+        // after it, reading as companions to the clock. Right-box plugins keep
+        // index-first placement so system indicators stay rightmost.
+        if (plugin.manifest.position === 'center-end')
+            return panelBox('center-end').get_n_children();
         return [...this._entries.values()]
             .filter(entry => entry.plugin.manifest.position === plugin.manifest.position)
             .sort((left, right) => compareManifests(left.plugin.manifest, right.plugin.manifest))

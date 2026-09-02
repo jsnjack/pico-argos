@@ -28,7 +28,7 @@ const MENU_LINK_KEYS = new Set(['id', 'kind', 'text', 'uri']);
 const MENU_ACTION_KEYS = new Set(['id', 'kind', 'text', 'selected']);
 const ICON_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const APPEARANCES = new Set(['accent', 'compact', 'monospace', 'normal']);
-const SEVERITIES = new Set(['normal', 'warning', 'critical']);
+const SEVERITIES = new Set(['normal', 'positive', 'warning', 'critical']);
 
 /** Describes invalid JSON or a protocol schema violation. */
 export class ProtocolError extends Error {

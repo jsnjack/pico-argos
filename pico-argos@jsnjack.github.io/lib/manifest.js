@@ -23,7 +23,7 @@ const RESERVED_ENVIRONMENT = new Set([
     'PICO_ARGOS_PLUGIN_ID',
 ]);
 const MODES = new Set(['oneshot', 'stream']);
-const POSITIONS = new Set(['left', 'center', 'right']);
+const POSITIONS = new Set(['left', 'center', 'center-end', 'right']);
 const FAILURE_POLICIES = new Set(['keep-last', 'hide', 'show-error']);
 const COMMON_KEYS = new Set([
     'manifestVersion',
@@ -135,7 +135,7 @@ export function validateManifest(value, pluginDirectory, directoryId) {
 
 /** Compares manifests in deterministic panel order. */
 export function compareManifests(left, right) {
-    const positionOrder = {left: 0, center: 1, right: 2};
+    const positionOrder = {left: 0, center: 1, 'center-end': 2, right: 3};
     return positionOrder[left.position] - positionOrder[right.position] ||
         left.order - right.order || left.id.localeCompare(right.id);
 }

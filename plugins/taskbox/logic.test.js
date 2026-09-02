@@ -80,13 +80,13 @@ if (byId.get('task:k-late-time').text !== '09:00 · Morning call' ||
     byId.get('done-count').text !== '2 tasks done today')
     throw new Error(`Menu rows failed: ${JSON.stringify(counting.menu)}`);
 
-// A clean day: no warning, a checked box with no digits, and an all-clear row.
+// A clean day: a green checked box with no digits, and an all-clear row.
 const clear = taskboxSnapshot(
     {version: 1, today: {overdue: [], timed: [], untimed: [], done: 0}},
     T('2026-09-02T12:00:00+02:00'));
 if (clear.panel.text !== undefined ||
     clear.panel.icon !== 'checkbox-checked-symbolic' ||
-    clear.panel.severity !== 'normal' ||
+    clear.panel.severity !== 'positive' ||
     clear.panel.accessibleName !== 'Nothing due today' ||
     clear.menu[0].id !== 'all-clear')
     throw new Error(`All-clear state failed: ${JSON.stringify(clear)}`);

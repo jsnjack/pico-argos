@@ -97,10 +97,12 @@ function panelState({current, remaining, overdue}) {
                 : `${remaining} tasks today`,
         };
     }
+    // A clear day is worth a color of its own: green says "all good" where
+    // a plain tick could be mistaken for one more piece of status furniture.
     return {
         icon: 'checkbox-checked-symbolic',
         appearance: 'normal',
-        severity: 'normal',
+        severity: 'positive',
         accessibleName: 'Nothing due today',
     };
 }

@@ -27,6 +27,10 @@
   color: -st-accent-color;
 }
 
+.pico-argos-severity-positive {
+  color: #33d17a;
+}
+
 .pico-argos-severity-warning {
   color: #f5c211;
 }

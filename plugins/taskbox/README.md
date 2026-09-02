@@ -7,15 +7,28 @@ panel:
   after, as accent text beside an alarm icon — be ready, then be in it.
 - Otherwise **the number of tasks still due today** beside an unticked
   checkbox, in the warning color while anything is overdue.
-- Otherwise **a ticked checkbox**: the day is all good.
+- Otherwise **a green ticked checkbox**: the day is all good.
 
 The menu lists the agenda: the overdue pile with when each entry slipped,
 today's tasks in time order with a `↻` mark on recurring ones, and how many
 were already finished today.
 
-The indicator sits in the center of the panel, immediately right of the
-clock (`order` 10, ahead of weather's 40): what is due next belongs beside
-what time it is.
+The indicator sits immediately right of the clock (`position: "center-end"`):
+what is due next belongs beside what time it is.
+
+## Symbols and colors
+
+| Panel shows | Meaning |
+|---|---|
+| ⏰ `10:00 Standup`, accent color, larger | A task's moment is now: due within 10 minutes, or started up to 10 minutes ago |
+| ☐ `5` | 5 tasks still due today |
+| ☐ `5`, yellow | 5 tasks still due today, and at least one is overdue |
+| ☑, green | Nothing due today |
+| nothing | Taskbox is not installed, not connected, or its data is stale |
+
+In the menu, `HH:MM · title` is a timed task, a bare title is due sometime
+today, `↻` marks a recurring task, and an overdue entry leads with the time
+or day it slipped.
 
 ## Data source
 
