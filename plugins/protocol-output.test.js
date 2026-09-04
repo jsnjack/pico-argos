@@ -2,6 +2,7 @@
 
 import {parseProtocolMessage} from '../pico-argos@jsnjack.github.io/lib/protocol.js';
 import {audioSnapshot} from './audio-devices/logic.js';
+import {batterySnapshot} from './battery-power/logic.js';
 import {dependabotSnapshot} from './dependabot/logic.js';
 import {pullReviewsSnapshot} from './pull-reviews/logic.js';
 import {systemSnapshot} from './system-monitor/metrics.js';
@@ -14,6 +15,18 @@ const snapshots = [
         inputs: [{id: 59, nodeName: 'input', label: 'Microphone'}],
         defaultOutputId: 44,
         defaultInputId: 59,
+    }),
+    batterySnapshot({
+        present: true,
+        status: 'Discharging',
+        acOnline: false,
+        powerW: 12.3,
+        capacityPercent: 62,
+        energyNowWh: 30,
+        energyFullWh: 48,
+        energyDesignWh: 50,
+        cycleCount: 55,
+        temperatureC: 33.9,
     }),
     dependabotSnapshot([
         {state: 'open', security_advisory: {severity: 'critical'}},

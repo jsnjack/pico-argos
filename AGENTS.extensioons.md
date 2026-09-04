@@ -350,6 +350,7 @@ reference defaults are compatibility constraints:
 |---|---|---|
 | system monitor | Linux `/proc` and `/sys` counters | legacy `cpu`/`mem`/`io`, arrows, `KBs`/`MBs`, and 13 px monospace remain the default; compact is opt-in |
 | audio devices | WirePlumber 0.5 GObject API | compact current output/microphone; native selected actions switch system defaults without polling |
+| battery power | Linux `/sys/class/power_supply` `uevent` attributes | left beside the system monitor; fixed-width monospace `↑`/`↓` watts, averaged and held in a hysteresis band; menu state, estimate, adapter contract, charge policy, energy, health with cycles and age, and temperature; severity color for a hardware fault only, never for the charge level |
 | Dependabot | GitHub Dependabot alerts API | hidden at zero; urgent-update symbolic icon and count; up to five direct alert links |
 | pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
 | Taskbox | local `taskbox agenda` JSON (never the Todoist API) | immediately right of the clock (`center-end`); current task in a ±10-minute accent window; remaining-count checkbox, warning while overdue, positive-green tick when clear; agenda menu with stable `task:<key>` IDs |

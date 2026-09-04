@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "id": "battery-power",
+  "mode": "stream",
+  "command": ["gjs", "-m", "./run.js"],
+  "startupTimeoutMs": 5000,
+  "heartbeatTimeoutMs": 45000,
+  "maxMessagesPerSecond": 2,
+  "maxBytesPerMinute": 65536,
+  "position": "left",
+  "order": 10,
+  "nice": 10,
+  "reserveTextChars": 7,
+  "passEnvironment": [],
+  "failurePolicy": "keep-last",
+  "maxStaleMs": 60000
+}

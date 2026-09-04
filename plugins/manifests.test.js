@@ -3,8 +3,10 @@
 import GLib from 'gi://GLib';
 
 import {parseManifest} from '../pico-argos@jsnjack.github.io/lib/manifest.js';
+import {PANEL_TEXT_LIMIT} from './battery-power/logic.js';
 
 for (const id of [
+    'battery-power',
     'system-monitor',
     'audio-devices',
     'dependabot',
@@ -17,6 +19,11 @@ for (const id of [
     const manifest = parseManifest(new TextDecoder().decode(bytes), directory, id);
     if (manifest.id !== id)
         throw new Error(`Reference manifest did not normalize: ${id}`);
+    if (id === 'battery-power' &&
+        (manifest.position !== 'left' || manifest.mode !== 'stream'))
+        throw new Error('Battery power must stream beside the system monitor');
+    if (id === 'battery-power' && manifest.reserveTextChars !== PANEL_TEXT_LIMIT)
+        throw new Error('Battery power must reserve the width its panel uses');
     if (id === 'system-monitor' && manifest.reserveTextChars !== 0)
         throw new Error('System monitor must size naturally for selected fields');
     if (id === 'system-monitor' && manifest.position !== 'left')
