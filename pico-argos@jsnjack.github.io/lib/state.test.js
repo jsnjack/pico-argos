@@ -104,6 +104,22 @@ const cases = [
             id: 'output:1',
             changes: {fields: {selected: true}},
         }], 'selected action update');
+
+        const launcher = new StateStore(parser);
+        launcher.accept('taskbox', JSON.stringify({
+            panel,
+            menu: [{id: 'launch', kind: 'launch', text: 'Launch',
+                desktopId: 'a.desktop'}],
+        }));
+        const relaunched = launcher.accept('taskbox', JSON.stringify({
+            panel,
+            menu: [{id: 'launch', kind: 'launch', text: 'Launch',
+                desktopId: 'b.desktop'}],
+        }));
+        assertEqual(relaunched.changes.menu.updated, [{
+            id: 'launch',
+            changes: {fields: {desktopId: 'b.desktop'}},
+        }], 'launch target update');
     }],
     ['failure and staleness policies transition only once', () => {
         const parser = raw => ({kind: 'snapshot', snapshot: JSON.parse(raw)});

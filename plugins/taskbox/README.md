@@ -7,11 +7,13 @@ panel:
   after, as accent text beside an alarm icon — be ready, then be in it.
 - Otherwise **the number of tasks still due today** beside an unticked
   checkbox, in the warning color while anything is overdue.
-- Otherwise **a green ticked checkbox**: the day is all good.
+- Otherwise **a ticked checkbox**: the day is all good.
 
 The menu lists the agenda: the overdue pile with when each entry slipped,
 today's tasks in time order with a `↻` mark on recurring ones, and how many
-were already finished today.
+were already finished today. It ends with **Launch Taskbox**, which opens the
+Taskbox application (`com.jsnjack.taskbox.desktop`) where a task is actually
+worked on.
 
 The indicator sits immediately right of the clock (`position: "center-end"`):
 what is due next belongs beside what time it is.
@@ -23,7 +25,7 @@ what is due next belongs beside what time it is.
 | ⏰ `10:00 Standup`, accent color, larger | A task's moment is now: due within 10 minutes, or started up to 10 minutes ago |
 | ☐ `5` | 5 tasks still due today |
 | ☐ `5`, yellow | 5 tasks still due today, and at least one is overdue |
-| ☑, green | Nothing due today |
+| ☑ | Nothing due today |
 | nothing | Taskbox is not installed, not connected, or its data is stale |
 
 In the menu, `HH:MM · title` is a timed task, a bare title is due sometime

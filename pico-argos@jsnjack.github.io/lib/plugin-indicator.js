@@ -261,6 +261,9 @@ export class PluginIndicator {
                 }
                 if (model.kind === 'link' && entry.model.uri !== model.uri)
                     this._recordMenuWrite();
+                if (model.kind === 'launch' &&
+                    entry.model.desktopId !== model.desktopId)
+                    this._recordMenuWrite();
                 if (model.kind === 'action' &&
                     entry.model.selected !== model.selected) {
                     this._applyActionState(entry.item, model.selected);
@@ -343,7 +346,8 @@ export class PluginIndicator {
             // the plugin later selected a different one. Always construct
             // interactive kinds as activatable and express the current
             // selection through the dynamic sensitivity path instead.
-            const interactive = model.kind === 'link' || model.kind === 'action';
+            const interactive = model.kind === 'link' ||
+                model.kind === 'launch' || model.kind === 'action';
             item = new PopupMenu.PopupMenuItem(model.text, {
                 reactive: interactive,
                 can_focus: interactive,
@@ -360,6 +364,13 @@ export class PluginIndicator {
                             `[pico-argos] Opening link for ${this.plugin.id} failed ` +
                             `(${error.domain ?? 'unknown'}:${error.code ?? 'unknown'})`);
                     }
+                });
+            } else if (model.kind === 'launch') {
+                signalId = item.connect('activate', () => {
+                    const current = this._menuEntries.get(model.id)?.model;
+                    if (current?.kind !== 'launch')
+                        return;
+                    this._launchDesktopId(current.desktopId);
                 });
             } else if (model.kind === 'action') {
                 this._applyActionState(item, model.selected);
@@ -378,6 +389,28 @@ export class PluginIndicator {
         this._menuEntries.set(model.id, entry);
         this.actor.menu.addMenuItem(item, index);
         return entry;
+    }
+
+    /**
+     * Starts one installed application by its freedesktop ID. The core never
+     * receives a command line: only an ID the desktop database resolves, so a
+     * plugin cannot smuggle an argument or a shell fragment through the menu.
+     */
+    _launchDesktopId(desktopId) {
+        try {
+            const appInfo = Gio.DesktopAppInfo.new(desktopId);
+            if (appInfo === null) {
+                console.error(
+                    `[pico-argos] Launch entry for ${this.plugin.id} is not ` +
+                    `installed: ${desktopId}`);
+                return;
+            }
+            appInfo.launch([], global.create_app_launch_context(0, -1));
+        } catch (error) {
+            console.error(
+                `[pico-argos] Launching ${desktopId} for ${this.plugin.id} ` +
+                `failed (${error.domain ?? 'unknown'}:${error.code ?? 'unknown'})`);
+        }
     }
 
     _applyActionState(item, selected) {

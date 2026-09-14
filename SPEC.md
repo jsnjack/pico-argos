@@ -638,6 +638,7 @@ Menu entries have stable unique IDs and one of these forms:
 {"id":"country","kind":"label","text":"Connected to NL"}
 {"id":"sep-1","kind":"separator"}
 {"id":"reviews","kind":"link","text":"Review requested","uri":"https://github.com/pulls/review-requested"}
+{"id":"launch","kind":"launch","text":"Launch Taskbox","desktopId":"com.jsnjack.taskbox.desktop"}
 {"id":"output:44","kind":"action","text":"Speakers","selected":true}
 ```
 
@@ -650,6 +651,12 @@ Menu rules:
 - Version 1 accepts only `https` URIs.
 - URIs are at most 2,048 UTF-8 bytes and must parse successfully with `GLib.Uri`.
 - Links are opened with `Gio.AppInfo.launch_default_for_uri()`.
+- `launch` starts one installed application. Its `desktopId` is a freedesktop
+  application ID matching `^[A-Za-z0-9][A-Za-z0-9._-]{0,126}\.desktop$`, so it
+  names a desktop-database entry and can carry no path, argument, or shell
+  fragment. It is resolved with `Gio.DesktopAppInfo.new()` and started with
+  `launch()` under the Shell's app launch context; an unresolved ID is reported
+  in diagnostics and does nothing. `launch` text follows the label limit.
 - Labels are not interactive.
 - `action` is accepted only in protocol version 2. Its ID is at most 128
   Unicode scalar values, `text` follows the label limit, and `selected` is
@@ -657,7 +664,7 @@ Menu rules:
   reactive.
 - Empty labels are rejected; separators represent visual grouping.
 - Plugins cannot provide callbacks, payloads, JavaScript, shell commands, CSS,
-  or markup.
+  or markup. A `launch` row provides identity only, exactly as `action` does.
 
 A stream may also emit a heartbeat:
 

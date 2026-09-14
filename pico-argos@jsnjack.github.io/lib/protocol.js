@@ -26,7 +26,11 @@ const MENU_COMMON_KEYS = new Set(['id', 'kind']);
 const MENU_TEXT_KEYS = new Set(['id', 'kind', 'text']);
 const MENU_LINK_KEYS = new Set(['id', 'kind', 'text', 'uri']);
 const MENU_ACTION_KEYS = new Set(['id', 'kind', 'text', 'selected']);
+const MENU_LAUNCH_KEYS = new Set(['id', 'kind', 'text', 'desktopId']);
 const ICON_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+// A freedesktop application ID: a plain basename ending in `.desktop`. Path
+// separators are excluded so a row names an installed entry, never a file.
+const DESKTOP_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,126}\.desktop$/;
 const APPEARANCES = new Set(['accent', 'compact', 'monospace', 'normal']);
 const SEVERITIES = new Set(['normal', 'positive', 'warning', 'critical']);
 
@@ -168,6 +172,19 @@ function validateMenu(values, protocolVersion) {
             validateHttpsUri(value.uri, context);
             return {id: value.id, kind: 'link', text: value.text, uri: value.uri};
         }
+        if (value.kind === 'launch') {
+            rejectUnknownKeys(value, MENU_LAUNCH_KEYS, context);
+            validateText(value.text, 512, `${context} text`);
+            if (value.text.length === 0)
+                throw new ProtocolError(`${context} launch text is empty`);
+            validateDesktopId(value.desktopId, context);
+            return {
+                id: value.id,
+                kind: 'launch',
+                text: value.text,
+                desktopId: value.desktopId,
+            };
+        }
         if (value.kind === 'action') {
             if (protocolVersion !== INTERACTIVE_PROTOCOL_VERSION)
                 throw new ProtocolError(`${context} action requires protocol version 2`);
@@ -229,6 +246,13 @@ function validateHttpsUri(value, context) {
     }
     if (uri.get_scheme()?.toLowerCase() !== 'https')
         throw new ProtocolError(`${context} URI must use HTTPS`);
+}
+
+function validateDesktopId(value, context) {
+    if (typeof value !== 'string')
+        throw new ProtocolError(`${context} desktop ID must be a string`);
+    if (!DESKTOP_ID_PATTERN.test(value))
+        throw new ProtocolError(`${context} desktop ID is invalid`);
 }
 
 function validateText(value, maximumScalars, context) {

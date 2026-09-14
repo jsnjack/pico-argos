@@ -293,6 +293,8 @@ function diffMenuItem(previous, next) {
         fields.text = next.text;
     if (next.kind === 'link' && previous.uri !== next.uri)
         fields.uri = next.uri;
+    if (next.kind === 'launch' && previous.desktopId !== next.desktopId)
+        fields.desktopId = next.desktopId;
     if (next.kind === 'action' && previous.selected !== next.selected)
         fields.selected = next.selected;
     return Object.keys(fields).length === 0 ? null : {fields};

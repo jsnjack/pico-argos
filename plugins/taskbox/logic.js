@@ -14,6 +14,8 @@ export const PANEL_TEXT_LIMIT = 32;
 
 const WINDOW_MS = WINDOW_MINUTES * 60_000;
 const MENU_TEXT_LIMIT = 512;
+/** The freedesktop entry the Taskbox RPM installs. */
+const TASKBOX_DESKTOP_ID = 'com.jsnjack.taskbox.desktop';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -97,12 +99,12 @@ function panelState({current, remaining, overdue}) {
                 : `${remaining} tasks today`,
         };
     }
-    // A clear day is worth a color of its own: green says "all good" where
-    // a plain tick could be mistaken for one more piece of status furniture.
+    // A clear day stays in the panel's own color: the ticked box already says
+    // "all good", and severity color is reserved for what needs attention.
     return {
         icon: 'checkbox-checked-symbolic',
         appearance: 'normal',
-        severity: 'positive',
+        severity: 'normal',
         accessibleName: 'Nothing due today',
     };
 }
@@ -134,6 +136,14 @@ function menuRows({overdue, timed, untimed, done}) {
             text: done === 1 ? '1 task done today' : `${done} tasks done today`,
         });
     }
+    // The agenda is a summary; the app is where a task is actually worked on.
+    rows.push({id: 'launch-separator', kind: 'separator'});
+    rows.push({
+        id: 'launch',
+        kind: 'launch',
+        text: 'Launch Taskbox',
+        desktopId: TASKBOX_DESKTOP_ID,
+    });
     return rows;
 }
 

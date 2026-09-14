@@ -289,12 +289,20 @@ Write one compact UTF-8 JSON object. A snapshot example is:
 {"id":"country","kind":"label","text":"Connected to NL"}
 {"id":"group-1","kind":"separator"}
 {"id":"reviews","kind":"link","text":"Review requested","uri":"https://github.com/pulls/review-requested"}
+{"id":"launch","kind":"launch","text":"Launch Taskbox","desktopId":"com.jsnjack.taskbox.desktop"}
 ```
 
 Text is plain, nonempty, newline-free, and at most 512 Unicode scalars. Links
 must be valid HTTPS URIs of at most 2,048 bytes. Use separate labels and
 separators for layout. Plugins cannot send callbacks, CSS, JavaScript, shell
 commands, nested menus, arbitrary icons, or markup.
+
+A `launch` row opens one installed application. Its `desktopId` is a plain
+freedesktop application ID ending in `.desktop`; paths, arguments, and shell
+fragments are rejected, and the core resolves the ID through the desktop
+database. Use it when the menu summarizes something the user then wants to work
+on in its own app, and prefer a `link` whenever an HTTPS destination says the
+same thing.
 
 One-shot stdout contains exactly one document, no extra logging, and is at most
 64 KiB. Exit zero only after writing the full document. Put diagnostics on
@@ -353,7 +361,7 @@ reference defaults are compatibility constraints:
 | battery power | Linux `/sys/class/power_supply` `uevent` attributes | left beside the system monitor; fixed-width monospace `↑`/`↓` watts, averaged and held in a hysteresis band; menu state, estimate, adapter contract, charge policy, energy, health with cycles and age, and temperature; severity color for a hardware fault only, never for the charge level |
 | Dependabot | GitHub Dependabot alerts API | hidden at zero; urgent-update symbolic icon and count; up to five direct alert links |
 | pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
-| Taskbox | local `taskbox agenda` JSON (never the Todoist API) | immediately right of the clock (`center-end`); current task in a ±10-minute accent window; remaining-count checkbox, warning while overdue, positive-green tick when clear; agenda menu with stable `task:<key>` IDs |
+| Taskbox | local `taskbox agenda` JSON (never the Todoist API) | immediately right of the clock (`center-end`); current task in a ±10-minute accent window; remaining-count checkbox, warning while overdue, plain symbolic tick when clear; agenda menu with stable `task:<key>` IDs and a trailing `Launch Taskbox` row |
 | VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; larger monochrome `☠︎` skull-and-crossbones glyph text; private country/city details with no public IP |
 | weather | `https://weather.yauhen.cc/api/v1/glance` | center placement, temperature/rain dots/condition icon, concise details, and bounded rain timing |
 

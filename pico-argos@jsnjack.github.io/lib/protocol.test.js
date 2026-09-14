@@ -59,6 +59,46 @@ const positive = parseProtocolMessage(JSON.stringify({
 }));
 assertEqual(positive.snapshot.panel.severity, 'positive', 'positive severity');
 
+// A launch row names an installed application, never a command line: the ID
+// must be a plain `.desktop` basename in version 1 and version 2 alike.
+const launching = parseProtocolMessage(JSON.stringify({
+    version: 1,
+    type: 'snapshot',
+    panel: null,
+    menu: [{
+        id: 'launch',
+        kind: 'launch',
+        text: 'Launch Taskbox',
+        desktopId: 'com.jsnjack.taskbox.desktop',
+    }],
+}));
+assertEqual(launching.snapshot.menu[0].desktopId,
+    'com.jsnjack.taskbox.desktop', 'launch desktop ID');
+const launchRow = {
+    id: 'launch',
+    kind: 'launch',
+    text: 'Launch Taskbox',
+    desktopId: 'com.jsnjack.taskbox.desktop',
+};
+assertInvalid({version: 1, type: 'snapshot', panel: null, menu: [
+    {...launchRow, desktopId: '../evil.desktop'},
+]}, /desktop ID is invalid/);
+assertInvalid({version: 1, type: 'snapshot', panel: null, menu: [
+    {...launchRow, desktopId: '/usr/share/applications/x.desktop'},
+]}, /desktop ID is invalid/);
+assertInvalid({version: 1, type: 'snapshot', panel: null, menu: [
+    {...launchRow, desktopId: 'com.jsnjack.taskbox'},
+]}, /desktop ID is invalid/);
+assertInvalid({version: 1, type: 'snapshot', panel: null, menu: [
+    {...launchRow, desktopId: 42},
+]}, /desktop ID must be a string/);
+assertInvalid({version: 1, type: 'snapshot', panel: null, menu: [
+    {...launchRow, text: ''},
+]}, /launch text is empty/);
+assertInvalid({version: 1, type: 'snapshot', panel: null, menu: [
+    {...launchRow, uri: 'https://example.com'},
+]}, /unknown field: uri/);
+
 assertEqual(parseProtocolMessage(
     '{"version":1,"type":"heartbeat"}',
     {allowHeartbeat: true}),

@@ -69,6 +69,7 @@ const expected = [
     'today-separator', 'today-heading',
     'task:k-standup', 'task:k-review', 'task:k-stamps',
     'done-separator', 'done-count',
+    'launch-separator', 'launch',
 ];
 if (JSON.stringify(ids) !== JSON.stringify(expected))
     throw new Error(`Menu order failed: ${JSON.stringify(ids)}`);
@@ -80,13 +81,19 @@ if (byId.get('task:k-late-time').text !== '09:00 · Morning call' ||
     byId.get('done-count').text !== '2 tasks done today')
     throw new Error(`Menu rows failed: ${JSON.stringify(counting.menu)}`);
 
-// A clean day: a green checked box with no digits, and an all-clear row.
+// Every menu ends with a way into the app itself.
+const launch = byId.get('launch');
+if (launch.kind !== 'launch' || launch.text !== 'Launch Taskbox' ||
+    launch.desktopId !== 'com.jsnjack.taskbox.desktop')
+    throw new Error(`Launch row failed: ${JSON.stringify(launch)}`);
+
+// A clean day: a plain checked box with no digits, and an all-clear row.
 const clear = taskboxSnapshot(
     {version: 1, today: {overdue: [], timed: [], untimed: [], done: 0}},
     T('2026-09-02T12:00:00+02:00'));
 if (clear.panel.text !== undefined ||
     clear.panel.icon !== 'checkbox-checked-symbolic' ||
-    clear.panel.severity !== 'positive' ||
+    clear.panel.severity !== 'normal' ||
     clear.panel.accessibleName !== 'Nothing due today' ||
     clear.menu[0].id !== 'all-clear')
     throw new Error(`All-clear state failed: ${JSON.stringify(clear)}`);
