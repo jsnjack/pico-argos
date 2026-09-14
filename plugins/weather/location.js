@@ -32,8 +32,8 @@ export function parseWeatherConfig(value) {
 
     const rawLocation = value.location ?? 'auto';
     let location;
-    if (rawLocation === 'auto')
-        location = 'auto';
+    if (rawLocation === 'auto' || rawLocation === 'ip')
+        location = rawLocation;
     else
         location = parseCoordinates(rawLocation, 'configured location');
 
@@ -55,6 +55,17 @@ export function parseWeatherConfig(value) {
         detectTimeoutMs,
         useGnomeLocation,
     });
+}
+
+/** Extracts validated coordinates from one bounded IP lookup response. */
+export function parseIpLocationResponse(value) {
+    requireObject(value, 'IP location response');
+    if (value.success !== true)
+        throw new Error('Weather IP location lookup failed');
+    return parseCoordinates({
+        latitude: value.latitude,
+        longitude: value.longitude,
+    }, 'IP location response');
 }
 
 /**
@@ -139,17 +150,27 @@ export function cacheDocument(coordinates, nowMs) {
 }
 
 /**
- * Chooses coordinates from the configured, detected, and cached sources.
+ * Chooses coordinates from the configured, IP, detected, and cached sources.
  * A null result requests the service default, preserving legacy behavior.
  */
 export function resolveLocation({
     config,
     gnome = null,
+    ip = null,
     detected = null,
     cached = null,
 }) {
-    if (config.location !== 'auto')
+    if (config.location !== 'auto' && config.location !== 'ip')
         return Object.freeze({coordinates: config.location, source: 'configured'});
+    if (config.location === 'ip') {
+        if (ip !== null)
+            return Object.freeze({coordinates: ip, source: 'ip'});
+        if (cached !== null)
+            return Object.freeze({coordinates: cached, source: 'ip-cache'});
+        if (config.fallback !== null)
+            return Object.freeze({coordinates: config.fallback, source: 'fallback'});
+        return Object.freeze({coordinates: null, source: 'unavailable'});
+    }
     if (gnome !== null)
         return Object.freeze({coordinates: gnome, source: 'gnome-weather'});
     if (detected !== null)

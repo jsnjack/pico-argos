@@ -39,8 +39,7 @@ $XDG_CONFIG_HOME/pico-argos/weather.json
 
 ```json
 {
-  "location": "auto",
-  "fallback": {"latitude": 52.3555, "longitude": 5.0003},
+  "location": "ip",
   "cacheTtlMs": 1800000,
   "detectTimeoutMs": 3000,
   "useGnomeLocation": true
@@ -48,8 +47,17 @@ $XDG_CONFIG_HOME/pico-argos/weather.json
 ```
 
 Set `location` to a `{"latitude": …, "longitude": …}` object to pin the report
-to one place and skip every other source; leave it at `"auto"` to follow GNOME
-and GeoClue. Every key is optional.
+to one place and skip every other source. Set it to `"auto"` to follow GNOME
+and GeoClue, or to `"ip"` to resolve approximate coordinates from the public
+IP address through `https://ipwho.is/`. Every key is optional.
+
+IP mode sends one HTTPS request to `ipwho.is` when its separate 30-minute cache
+is empty; the request necessarily reveals the public IP address to that
+service. Only the success flag and coordinates are requested, the response is
+capped at 4 KiB, and failure preserves the last panel state instead of showing
+the weather endpoint's unrelated default city unless an explicit `fallback`
+is configured. A VPN or relay makes IP mode follow its exit location rather
+than the computer's physical location.
 
 ## Following GNOME Weather
 
@@ -65,9 +73,6 @@ Weather and choosing your city moves both GNOME's own forecast and this panel
 together, with no plugin configuration at all. An absent schema, an absent key,
 or an unexpected value is treated as no location rather than an error.
 
-Automatic detection depends on a working GeoClue backend. It resolves nothing
+GeoClue automatic detection depends on a working backend. It resolves nothing
 when location services are disabled, when the WiFi geolocation database has no
 coverage for nearby access points, or when the network blocks that database.
-Note that a VPN defeats IP-based geolocation in particular, since the apparent
-address is the exit node rather than yours; pin `location` or set `fallback`
-when travelling behind one.

@@ -14,11 +14,18 @@ import {
     MAX_CONFIG_BYTES,
     parseCachedLocation,
     parseGnomeLocations,
+    parseIpLocationResponse,
     parseWeatherConfig,
     resolveLocation,
 } from './location.js';
 
 const WEATHER_SOURCE = 'https://weather.yauhen.cc/api/v1/glance';
+const IP_LOCATION_SOURCE =
+    'https://ipwho.is/?fields=success,latitude,longitude';
+const IP_LOCATION_MAX_BYTES = 4 * 1_024;
+const IP_LOCATION_TIMEOUT_SECONDS = 3;
+const GEOCLUE_CACHE_NAME = 'weather-location.json';
+const IP_CACHE_NAME = 'weather-ip-location.json';
 const GEOCLUE_NAME = 'org.freedesktop.GeoClue2';
 const MANAGER_PATH = '/org/freedesktop/GeoClue2/Manager';
 const MANAGER_INTERFACE = 'org.freedesktop.GeoClue2.Manager';
@@ -33,27 +40,43 @@ try {
     const config = loadConfiguration();
     const nowMs = Date.now();
     let gnome = null;
+    let ip = null;
     let cached = null;
     let detected = null;
     if (config.location === 'auto') {
         gnome = config.useGnomeLocation ? readGnomeLocation() : null;
         if (gnome === null) {
-            cached = loadCachedLocation(config, nowMs);
+            cached = loadCachedLocation(config, nowMs, GEOCLUE_CACHE_NAME);
             if (cached === null) {
                 detected = await detectLocation(config.detectTimeoutMs);
                 if (detected !== null)
-                    storeCachedLocation(detected, nowMs);
+                    storeCachedLocation(detected, nowMs, GEOCLUE_CACHE_NAME);
+            }
+        }
+    } else if (config.location === 'ip') {
+        cached = loadCachedLocation(config, nowMs, IP_CACHE_NAME);
+        if (cached === null) {
+            try {
+                ip = lookupIpLocation();
+                storeCachedLocation(ip, nowMs, IP_CACHE_NAME);
+            } catch (error) {
+                if (config.fallback === null)
+                    throw error;
+                printerr(`[weather] ${error.message}; using fallback location`);
             }
         }
     }
-    const resolved = resolveLocation({config, gnome, detected, cached});
+    const resolved = resolveLocation({config, gnome, ip, detected, cached});
+    if (resolved.coordinates === null && config.location === 'ip')
+        throw new Error('IP location is unavailable');
 
     const message = Soup.Message.new(
         'GET', glanceUri(WEATHER_SOURCE, resolved.coordinates));
     message.request_headers.append('Accept', 'application/json');
     message.request_headers.append('User-Agent', 'argos-weather/1.0');
     const bytes = readBoundedResponse(
-        new Soup.Session({timeout: 15}), message, 1_048_576);
+        new Soup.Session({timeout: 15}), message, 1_048_576,
+        'weather response');
     if (message.status_code < 200 || message.status_code >= 300)
         throw new Error(`Weather service returned HTTP ${message.status_code}`);
     const data = JSON.parse(
@@ -62,6 +85,20 @@ try {
 } catch (error) {
     printerr(`[weather] ${error.message}`);
     System.exit(1);
+}
+
+function lookupIpLocation() {
+    const message = Soup.Message.new('GET', IP_LOCATION_SOURCE);
+    message.request_headers.append('Accept', 'application/json');
+    message.request_headers.append('User-Agent', 'pico-argos-weather/1.0');
+    const bytes = readBoundedResponse(
+        new Soup.Session({timeout: IP_LOCATION_TIMEOUT_SECONDS}), message,
+        IP_LOCATION_MAX_BYTES, 'IP location response');
+    if (message.status_code < 200 || message.status_code >= 300)
+        throw new Error(
+            `IP location service returned HTTP ${message.status_code}`);
+    return parseIpLocationResponse(JSON.parse(
+        new TextDecoder('utf-8', {fatal: true}).decode(bytes)));
 }
 
 /**
@@ -210,21 +247,22 @@ function loadConfiguration() {
     return parseWeatherConfig(value ?? undefined);
 }
 
-function loadCachedLocation(config, nowMs) {
+function loadCachedLocation(config, nowMs, cacheName) {
     if (config.cacheTtlMs === 0)
         return null;
     try {
         return parseCachedLocation(
-            readBoundedJson(cachePath(), MAX_CACHE_BYTES, 'location cache'),
+            readBoundedJson(
+                cachePath(cacheName), MAX_CACHE_BYTES, 'location cache'),
             nowMs, config.cacheTtlMs);
     } catch {
         return null;
     }
 }
 
-function storeCachedLocation(coordinates, nowMs) {
+function storeCachedLocation(coordinates, nowMs, cacheName) {
     try {
-        const file = Gio.File.new_for_path(cachePath());
+        const file = Gio.File.new_for_path(cachePath(cacheName));
         const parent = file.get_parent();
         if (parent !== null && !parent.query_exists(null))
             parent.make_directory_with_parents(null);
@@ -238,11 +276,11 @@ function storeCachedLocation(coordinates, nowMs) {
     }
 }
 
-function cachePath() {
+function cachePath(cacheName) {
     return GLib.build_filenamev([
         GLib.get_user_cache_dir(),
         'pico-argos',
-        'weather-location.json',
+        cacheName,
     ]);
 }
 
@@ -259,7 +297,7 @@ function readBoundedJson(path, maximumBytes, context) {
     return JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(data));
 }
 
-function readBoundedResponse(session, message, maximumBytes) {
+function readBoundedResponse(session, message, maximumBytes, context) {
     const stream = session.send(message, null);
     const chunks = [];
     let length = 0;
@@ -272,7 +310,7 @@ function readBoundedResponse(session, message, maximumBytes) {
                 break;
             length += chunk.length;
             if (length > maximumBytes)
-                throw new Error('Weather response exceeds 1 MiB');
+                throw new Error(`${context} exceeds ${maximumBytes} bytes`);
             chunks.push(chunk);
         }
     } finally {

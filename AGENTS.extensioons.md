@@ -363,7 +363,7 @@ reference defaults are compatibility constraints:
 | pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
 | Taskbox | local `taskbox agenda` JSON (never the Todoist API) | immediately right of the clock (`center-end`); current task in a ±10-minute accent window; remaining-count checkbox, warning while overdue, plain symbolic tick when clear; agenda menu with stable `task:<key>` IDs and a trailing `Launch Taskbox` row |
 | VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; larger monochrome `☠︎` skull-and-crossbones glyph text; private country/city details with no public IP |
-| weather | `https://weather.yauhen.cc/api/v1/glance` | center placement, temperature/rain dots/condition icon, concise details, and bounded rain timing |
+| weather | `https://weather.yauhen.cc/api/v1/glance`; optional IP coordinates from `https://ipwho.is/` | center placement, temperature/rain dots/condition icon, concise details, and bounded rain timing |
 
 The `weather.yauhen.cc` source is deliberate. **Do not replace, proxy, or add a
 fallback weather source without an explicit user request.** Fetch it once per

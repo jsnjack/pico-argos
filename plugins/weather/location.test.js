@@ -8,6 +8,7 @@ import {
     parseCachedLocation,
     parseCoordinates,
     parseGnomeLocations,
+    parseIpLocationResponse,
     parseWeatherConfig,
     resolveLocation,
 } from './location.js';
@@ -63,6 +64,21 @@ assertInvalid(() => parseWeatherConfig({typo: true}), /unknown key/);
 assertInvalid(() => parseWeatherConfig({location: 'home'}), /must be an object/);
 assertInvalid(() => parseWeatherConfig({detectTimeoutMs: 60_000}), /detectTimeoutMs/);
 
+// IP mode is explicit and accepts only a successful response with coordinates.
+const ipConfig = parseWeatherConfig({location: 'ip'});
+assertEqual(ipConfig.location, 'ip', 'IP location mode is accepted');
+assertEqual(parseIpLocationResponse({
+    success: true,
+    latitude: 47.674_01,
+    longitude: -122.121_51,
+}), {latitude: 47.674, longitude: -122.1215},
+'IP coordinates are validated and rounded');
+assertInvalid(
+    () => parseIpLocationResponse({success: false}), /lookup failed/);
+assertInvalid(
+    () => parseIpLocationResponse({success: true, latitude: 91, longitude: 0}),
+    /latitude/);
+
 // An explicit configured location wins over every detected source.
 const fixed = parseWeatherConfig({
     location: {latitude: 41.3874, longitude: 2.1686},
@@ -81,6 +97,35 @@ assertEqual(
     glanceUri(SOURCE, configured.coordinates),
     `${SOURCE}?lat=41.3874&lon=2.1686`,
     'coordinates are appended to the legacy endpoint');
+
+assertEqual(resolveLocation({
+    config: ipConfig,
+    ip: {latitude: 47.674, longitude: -122.1215},
+    cached: {latitude: 1, longitude: 1},
+}), {
+    coordinates: {latitude: 47.674, longitude: -122.1215},
+    source: 'ip',
+}, 'a fresh IP lookup wins over its cache');
+assertEqual(resolveLocation({
+    config: ipConfig,
+    cached: {latitude: 47.674, longitude: -122.1215},
+}), {
+    coordinates: {latitude: 47.674, longitude: -122.1215},
+    source: 'ip-cache',
+}, 'IP mode uses its cache');
+assertEqual(resolveLocation({config: ipConfig}), {
+    coordinates: null,
+    source: 'unavailable',
+}, 'IP mode never uses the weather service default');
+assertEqual(resolveLocation({
+    config: parseWeatherConfig({
+        location: 'ip',
+        fallback: {latitude: 52.3555, longitude: 5.0003},
+    }),
+}), {
+    coordinates: {latitude: 52.3555, longitude: 5.0003},
+    source: 'fallback',
+}, 'IP mode can use an explicit fallback');
 
 // Automatic resolution prefers a detection, then the cache, then the fallback.
 const auto = parseWeatherConfig({
