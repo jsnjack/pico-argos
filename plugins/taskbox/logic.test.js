@@ -56,7 +56,7 @@ if (overdueCurrent.panel.text !== '09:00 Morning call')
 // overdue pile.
 const counting = taskboxSnapshot(agenda, T('2026-09-02T12:00:00+02:00'));
 if (counting.panel.text !== '5' ||
-    counting.panel.icon !== 'checkbox-symbolic' ||
+    counting.panel.icon !== 'view-list-symbolic' ||
     counting.panel.severity !== 'warning' ||
     counting.panel.accessibleName !== '5 tasks today, 2 overdue')
     throw new Error(`Count state failed: ${JSON.stringify(counting.panel)}`);

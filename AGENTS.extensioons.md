@@ -361,7 +361,7 @@ reference defaults are compatibility constraints:
 | battery power | Linux `/sys/class/power_supply` `uevent` attributes | left beside the system monitor; fixed-width monospace `↑`/`↓` watts, averaged and held in a hysteresis band; menu state, estimate, adapter contract, charge policy, energy, health with cycles and age, and temperature; severity color for a hardware fault only, never for the charge level |
 | Dependabot | GitHub Dependabot alerts API | hidden at zero; urgent-update symbolic icon and count; up to five direct alert links |
 | pull reviews | GitHub GraphQL search | symbolic all-clear/review state, bounded requested-pull links, and the existing workflow destinations |
-| Taskbox | local `taskbox agenda` JSON (never the Todoist API) | immediately right of the clock (`center-end`); current task in a ±10-minute accent window; remaining-count checkbox, warning while overdue, plain symbolic tick when clear; agenda menu with stable `task:<key>` IDs and a trailing `Launch Taskbox` row |
+| Taskbox | local `taskbox agenda` JSON (never the Todoist API) | immediately right of the clock (`center-end`); current task in a ±10-minute accent window; remaining-count three-row checklist, warning while overdue, plain symbolic tick when clear; agenda menu with stable `task:<key>` IDs and a trailing `Launch Taskbox` row |
 | VPN | `https://web-api.nordvpn.com/v1/ips/info` | hidden when unprotected; larger monochrome `☠︎` skull-and-crossbones glyph text; private country/city details with no public IP |
 | weather | `https://weather.yauhen.cc/api/v1/glance`; optional IP coordinates from `https://ipwho.is/` | center placement, temperature/rain dots/condition icon, concise details, and bounded rain timing |
 

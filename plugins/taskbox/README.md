@@ -5,8 +5,8 @@ panel:
 
 - **The current task**, from 10 minutes before its moment until 10 minutes
   after, as accent text beside an alarm icon — be ready, then be in it.
-- Otherwise **the number of tasks still due today** beside an unticked
-  checkbox, in the warning color while anything is overdue.
+- Otherwise **the number of tasks still due today** beside a three-row
+  checklist icon, in the warning color while anything is overdue.
 - Otherwise **a ticked checkbox**: the day is all good.
 
 The menu lists the agenda: the overdue pile with when each entry slipped,
@@ -23,8 +23,8 @@ what is due next belongs beside what time it is.
 | Panel shows | Meaning |
 |---|---|
 | ⏰ `10:00 Standup`, accent color, larger | A task's moment is now: due within 10 minutes, or started up to 10 minutes ago |
-| ☐ `5` | 5 tasks still due today |
-| ☐ `5`, yellow | 5 tasks still due today, and at least one is overdue |
+| Checklist icon and `5` | 5 tasks still due today |
+| Checklist icon and `5`, yellow | 5 tasks still due today, and at least one is overdue |
 | ☑ | Nothing due today |
 | nothing | Taskbox is not installed, not connected, or its data is stale |
 

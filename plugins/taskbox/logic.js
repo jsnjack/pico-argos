@@ -90,7 +90,7 @@ function panelState({current, remaining, overdue}) {
     }
     if (remaining > 0) {
         return {
-            icon: 'checkbox-symbolic',
+            icon: 'view-list-symbolic',
             text: String(remaining),
             appearance: 'normal',
             severity: overdue > 0 ? 'warning' : 'normal',
