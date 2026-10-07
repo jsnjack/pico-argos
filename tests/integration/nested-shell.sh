@@ -31,10 +31,19 @@ export PIPEWIRE_RUNTIME_DIR=${PIPEWIRE_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/run/user
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/pico-argos-integration.XXXXXX")
 cleanup() {
     if [[ $test_root == "${TMPDIR:-/tmp}"/pico-argos-integration.* ]]; then
-        rm -rf -- "$test_root"
+        # Activated portals can finish unmounting after the session bus exits.
+        for _attempt in {1..50}; do
+            if rm -rf --one-file-system -- "$test_root" 2>/dev/null; then
+                return
+            fi
+            sleep 0.1
+        done
+        rm -rf --one-file-system -- "$test_root"
     fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 presentation_client="$test_root/presentation-client"
 "$repo_root/tests/performance/build-presentation-client.sh" "$presentation_client"
@@ -60,6 +69,13 @@ cp "$repo_root/pico-argos@jsnjack.github.io/lib/trace.js" "$actor_dir/lib/"
 export PICO_ARGOS_TEST_ROOT=$test_root
 export PICO_ARGOS_REPO_ROOT=$repo_root
 export PICO_ARGOS_PRESENTATION_CLIENT=$presentation_client
+# Bus-activated services inherit the bus daemon's environment, not its clients'.
+export XDG_CONFIG_HOME="$test_root/config"
+export XDG_CACHE_HOME="$test_root/cache"
+export XDG_DATA_HOME="$test_root/data"
+export XDG_RUNTIME_DIR="$test_root/runtime"
+export XDG_DATA_DIRS="/usr/local/share:/usr/share"
+export GSETTINGS_BACKEND=keyfile
 dbus-run-session -- "$repo_root/tests/integration/nested-session.sh"
 
 echo "ok - nested GNOME Shell lifecycle, reload, diagnostics, preferences, and actors"

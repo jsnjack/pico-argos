@@ -12,13 +12,7 @@ shell_log="$test_root/shell.log"
 prefs_log="$test_root/preferences.log"
 summary_file="$test_root/summary.json"
 presentation_file="$test_root/presentation.ndjson"
-export XDG_CONFIG_HOME="$test_root/config"
-export XDG_CACHE_HOME="$test_root/cache"
-export XDG_DATA_HOME="$test_root/data"
-export XDG_RUNTIME_DIR="$test_root/runtime"
-export XDG_DATA_DIRS="/usr/local/share:/usr/share"
 export GSETTINGS_SCHEMA_DIR="$test_root/data/gnome-shell/extensions/$uuid/schemas"
-export GSETTINGS_BACKEND=keyfile
 
 wait_for_summary() {
     local filter=$1

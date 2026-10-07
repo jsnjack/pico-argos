@@ -144,6 +144,10 @@ does not belong in that schema.
 
 ## Gotchas
 
+- The nested-Shell launcher exports its private XDG directories and keyfile
+  GSettings backend before starting `dbus-run-session`. Setting them only in
+  the client script leaves bus-activated portals using the desktop runtime.
+
 - Extension JavaScript and async completion callbacks run in GNOME Shell's main
   context; all synchronous phases are compositor-critical.
 - `Gio.Subprocess` creation is synchronous even when pipe I/O and waiting are
