@@ -44,7 +44,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-gnome-shell --devkit --wayland --no-x11 \
+gnome-shell --headless --wayland --no-x11 \
     --wayland-display=pico-argos-integration \
     --virtual-monitor=1280x720@60 >"$shell_log" 2>&1 &
 shell_pid=$!

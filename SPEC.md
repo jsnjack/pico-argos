@@ -6,7 +6,7 @@ Project name: `pico-argos`
 
 Extension UUID: `pico-argos@jsnjack.github.io`
 
-Target platform: Linux, GNOME Shell 50, Wayland
+Target platform: Linux, GNOME Shell 50 and 51, Wayland
 
 Implementation language: GJS using ES modules
 
@@ -1323,7 +1323,7 @@ Mutation counters are assertions:
 
 ### 17.4 GNOME Integration
 
-GNOME 50 integration tests run in a nested Wayland Shell using Mutter devkit.
+GNOME 50 and 51 integration tests run in a headless Wayland Shell with a virtual monitor, so no window opens on the desktop.
 They verify enable/disable cycles, placement, menu links, settings, directory
 reload, actor counts, and absence of critical log messages.
 

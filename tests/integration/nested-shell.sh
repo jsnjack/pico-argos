@@ -15,18 +15,14 @@ for required in cc dbus-run-session gdbus gjs glib-compile-schemas gnome-extensi
         exit 1
     fi
 done
-if [[ $(gnome-shell --version) != 'GNOME Shell 50.'* ]]; then
-    echo "Nested integration requires GNOME Shell 50" >&2
+if [[ $(gnome-shell --version) != 'GNOME Shell '5[01].* ]]; then
+    echo "Nested integration requires GNOME Shell 50 or 51" >&2
     exit 1
 fi
 if [[ ! -s "$package" ]]; then
     echo "Build the extension first with: make package" >&2
     exit 1
 fi
-
-# mutter-devkit needs the host PipeWire socket after the nested session
-# replaces XDG_RUNTIME_DIR to isolate its Wayland display.
-export PIPEWIRE_RUNTIME_DIR=${PIPEWIRE_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/run/user/$UID}}
 
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/pico-argos-integration.XXXXXX")
 cleanup() {

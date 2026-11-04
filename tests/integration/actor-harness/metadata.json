@@ -3,7 +3,8 @@
   "description": "Nested-Shell actor mutation assertions for pico-argos.",
   "uuid": "pico-argos-actor-test@jsnjack.github.io",
   "shell-version": [
-    "50"
+    "50",
+    "51"
   ],
   "version": 1
 }

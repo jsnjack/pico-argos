@@ -31,7 +31,7 @@ AGENTS.universal.md             Shared engineering conventions
 AGENTS.gjs.md                   GNOME Shell and GJS conventions
 Makefile                        Validation, staging, packaging, and installation
 package.json                    Pinned project development tooling
-pico-argos@jsnjack.github.io/   Installable GNOME Shell 50 extension source
+pico-argos@jsnjack.github.io/   Installable GNOME Shell 50–51 extension source
   extension.js                  Production lifecycle entry point
   lib/                          Diagnostics, runtime, state, and persistent rendering
   schemas/                      Extension GSettings schema

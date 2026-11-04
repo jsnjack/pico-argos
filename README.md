@@ -1,6 +1,6 @@
 # pico-argos
 
-`pico-argos` is a GNOME Shell 50 extension that displays status information
+`pico-argos` is a GNOME Shell 50 and 51 extension that displays status information
 from executable plugins. Performance is a primary design constraint: plugin
 work is bounded, unchanged state is filtered out, and panel actors are updated
 in place.
@@ -39,7 +39,7 @@ outside the extension package:
 
 ## Install
 
-The current target is Linux with GNOME Shell 50 on Wayland. Build and install
+The current target is Linux with GNOME Shell 50 or 51 on Wayland. Build and install
 from this checkout with:
 
 ```bash

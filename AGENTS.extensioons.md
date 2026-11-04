@@ -7,7 +7,7 @@
 
 ## Purpose and boundaries
 
-pico-argos is a universal GNOME Shell 50 status runtime. The core discovers,
+pico-argos is a universal GNOME Shell 50–51 status runtime. The core discovers,
 runs, validates, diffs, and renders plugin output. It must never learn domain
 logic for weather, GitHub, VPNs, audio, hardware, or another integration. Put
 that logic in a user-installed plugin and communicate exclusively through the
@@ -31,7 +31,7 @@ make install
 gnome-extensions enable pico-argos@jsnjack.github.io
 ```
 
-`make check` includes a real GNOME 50 nested-Wayland session. Do not claim that
+`make check` includes a real GNOME 50 or 51 nested-Wayland session. Do not claim that
 full performance acceptance passed merely because packaging or unit tests pass.
 On Wayland, replacing extension code normally requires a nested Shell or a
 logout/login cycle. Open settings with:
