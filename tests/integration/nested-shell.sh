@@ -24,18 +24,36 @@ if [[ ! -s "$package" ]]; then
     exit 1
 fi
 
+# A document portal sharing the desktop's runtime directory unmounts its doc
+# filesystem, and Flatpak apps then fail to start. The private XDG_RUNTIME_DIR
+# below prevents that; the check in cleanup fails the run if it happens anyway.
+desktop_doc=/run/user/$(id -u)/doc
+had_doc=
+if mountpoint -q "$desktop_doc" 2>/dev/null; then
+    had_doc=1
+fi
+check_desktop_doc() {
+    if [[ -n $had_doc ]] && ! mountpoint -q "$desktop_doc"; then
+        echo "$desktop_doc was unmounted during this run, so Flatpak apps cannot start." >&2
+        echo "Restore it with: systemctl --user restart xdg-document-portal.service" >&2
+        exit 1
+    fi
+}
+
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/pico-argos-integration.XXXXXX")
 cleanup() {
     if [[ $test_root == "${TMPDIR:-/tmp}"/pico-argos-integration.* ]]; then
         # Activated portals can finish unmounting after the session bus exits.
         for _attempt in {1..50}; do
             if rm -rf --one-file-system -- "$test_root" 2>/dev/null; then
+                check_desktop_doc
                 return
             fi
             sleep 0.1
         done
         rm -rf --one-file-system -- "$test_root"
     fi
+    check_desktop_doc
 }
 trap cleanup EXIT
 trap 'exit 130' INT
