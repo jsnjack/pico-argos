@@ -8,9 +8,19 @@ ESLINT := node_modules/.bin/eslint
 SCHEMAS := $(wildcard $(SRC_DIR)/schemas/*.gschema.xml)
 PACKAGE := $(DIST_DIR)/$(UUID).shell-extension.zip
 
-.PHONY: check spec-check format-check lint test schemas package package-check integration-test install install_plugins standards clean
+.PHONY: check agents-size spec-check format-check lint test schemas package package-check integration-test install install_plugins standards clean
 
-check: spec-check format-check lint test package-check integration-test
+# Every agent session loads AGENTS.md whole, and Codex reads only its first
+# 32 KiB: keep it under the limit (AGENTS.universal.md, "AGENTS.md size").
+AGENTS_MAX_BYTES ?= 30000
+agents-size:
+	@size=$$(wc -c < AGENTS.md); \
+	if [ "$$size" -gt $(AGENTS_MAX_BYTES) ]; then \
+	  echo "AGENTS.md is $$size bytes, over the $(AGENTS_MAX_BYTES)-byte limit: move detail to docs/ (AGENTS.universal.md, \"AGENTS.md size\")"; \
+	  exit 1; \
+	fi
+
+check: spec-check format-check lint test package-check integration-test agents-size
 	@echo "==> make check: all green"
 
 spec-check:
