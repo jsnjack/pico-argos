@@ -35,9 +35,8 @@ try {
     for (const name of ['plugin.json', 'run'])
         write(`repo/tests/fixtures/plugins/smoke/${name}`, 'fixture');
     write('bin/gnome-shell', '#!/bin/bash\necho "GNOME Shell 50.0"\n', true);
-    for (const name of ['cc', 'gdbus', 'gjs', 'glib-compile-schemas',
-        'gnome-extensions', 'gsettings', 'jq', 'pgrep', 'pkg-config',
-        'rg', 'unzip', 'wayland-scanner'])
+    for (const name of ['cc', 'gdbus', 'gjs', 'gnome-extensions', 'jq',
+        'pgrep', 'pkg-config', 'rg', 'unzip', 'wayland-scanner'])
         write(`bin/${name}`, '#!/bin/bash\nexit 0\n', true);
     write('bin/dbus-run-session', `#!/bin/bash
 set -eu

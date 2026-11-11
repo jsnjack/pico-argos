@@ -20,7 +20,6 @@ const DISPLAY_CONFIG_INTERFACE = 'org.gnome.Mutter.DisplayConfig';
 /** Owns production summary, trace controls, stage arming, and sanitized export. */
 export class ProductionDiagnostics {
     constructor({
-        settings,
         metadata,
         clock,
         diagnostics,
@@ -29,7 +28,6 @@ export class ProductionDiagnostics {
         getPlugins,
         getRegistryErrors,
     }) {
-        this._settings = settings;
         this._metadata = metadata;
         this._clock = clock;
         this._diagnostics = diagnostics;
@@ -37,7 +35,6 @@ export class ProductionDiagnostics {
         this._getRuntimeSnapshot = getRuntimeSnapshot;
         this._getPlugins = getPlugins;
         this._getRegistryErrors = getRegistryErrors;
-        this._settingsSignalId = 0;
         this._traceTimerId = 0;
         this._traceExporter = null;
         this._lastTraceLogUs = null;
@@ -58,10 +55,6 @@ export class ProductionDiagnostics {
         });
         this._service.enable();
         this._refreshMonitorConfiguration();
-        this._settingsSignalId = this._settings.connect(
-            'changed::diagnostics-mode',
-            () => this._diagnostics.setMode(
-                this._settings.get_string('diagnostics-mode')));
     }
 
     /** Records the one coalesced UI phase and arms stage hooks only on writes. */
@@ -149,10 +142,6 @@ export class ProductionDiagnostics {
     destroy() {
         this._service?.destroy();
         this._service = null;
-        if (this._settingsSignalId !== 0) {
-            this._settings.disconnect(this._settingsSignalId);
-            this._settingsSignalId = 0;
-        }
         if (this._traceTimerId !== 0) {
             GLib.source_remove(this._traceTimerId);
             this._traceTimerId = 0;
@@ -165,7 +154,6 @@ export class ProductionDiagnostics {
         this._monitorCancellable.cancel();
         this._monitorRefreshRates.clear();
         this._slowPhaseLogs.clear();
-        this._settings = null;
     }
 
     _completeTrace() {

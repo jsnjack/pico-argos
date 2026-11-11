@@ -67,6 +67,33 @@ gnome-extensions prefs pico-argos@jsnjack.github.io
 Plugin directories, manifests, and directly executed files must be owned by the
 current user and must not be group- or world-writable.
 
+## Configure
+
+Everything is configured in one optional file,
+`~/.config/pico-argos/config.json`. The `extension` object holds the
+preferences, and each plugin's object under `plugins` holds its panel placement
+and its own settings:
+
+```json
+{
+  "extension": {"diagnosticsMode": "summary"},
+  "plugins": {
+    "system-monitor": {
+      "fastIntervalMs": 1000,
+      "thresholds": {"cpu": {"warning": 80, "critical": 90}}
+    },
+    "weather": {"enabled": false}
+  }
+}
+```
+
+`enabled`, `position`, and `order` belong to pico-argos; every other key is
+passed to the plugin. Each plugin's README lists its settings. Saving the file
+applies it immediately and restarts only the plugins whose settings changed. If
+the file is invalid, pico-argos keeps the last valid version and shows the error
+in preferences. Access tokens such as `GITHUB_TOKEN` stay in the session
+environment, not in this file.
+
 ## Write a plugin
 
 A plugin directory contains `plugin.json` and the program named by its command

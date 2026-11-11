@@ -28,9 +28,9 @@ fi
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "$script_dir/../.." && pwd)
 uuid=pico-argos@jsnjack.github.io
-schema=org.gnome.shell.extensions.pico-argos
-schema_dir="${XDG_DATA_HOME:-${HOME:?HOME is not set}/.local/share}/gnome-shell/extensions/$uuid/schemas"
-for command_name in gjs gnome-extensions gsettings jq rg; do
+# shellcheck source=tests/performance/live-config.sh
+source "$script_dir/live-config.sh"
+for command_name in gjs gnome-extensions jq rg; do
     command -v "$command_name" >/dev/null || {
         echo "Missing redraw A/B command: $command_name" >&2
         exit 1
@@ -44,30 +44,17 @@ if ! gnome-extensions list --enabled | rg -qx "$uuid"; then
     echo 'Enable pico-argos before running the redraw A/B' >&2
     exit 1
 fi
-if [[ ! -f $schema_dir/gschemas.compiled ]]; then
-    echo "Compiled installed schema missing at $schema_dir" >&2
-    exit 1
-fi
 
-settings() {
-    gsettings --schemadir "$schema_dir" "$@"
-}
-if ! settings list-keys "$schema" | rg -qx performance-explicit-redraw; then
-    echo 'The installed package does not contain the redraw A/B setting' >&2
-    exit 1
-fi
-original_redraw=$(settings get "$schema" performance-explicit-redraw)
+mkdir -m 700 -- "$output_root"
+output_root=$(cd "$output_root" && pwd)
+live_config_backup "$output_root"
 cleanup() {
     set +e
-    settings set "$schema" performance-explicit-redraw "$original_redraw" \
-        >/dev/null 2>&1
+    live_config_restore
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-
-mkdir -m 700 -- "$output_root"
-output_root=$(cd "$output_root" && pwd)
 original_summary="$output_root/original-summary.json"
 if ! gjs -m "$repo_root/tests/integration/dbus-client.js" summary \
     >"$original_summary" ||
@@ -90,7 +77,7 @@ export PICO_ARGOS_PRESENTATION_CLIENT=$presentation_client
 apply_redraw_mode() {
     local enabled=$1
     local pending="$output_root/redraw-mode.pending.json"
-    settings set "$schema" performance-explicit-redraw "$enabled"
+    live_config_set --argjson enabled "$enabled" '.extension.explicitPanelRedraw = $enabled'
     for _attempt in $(seq 1 50); do
         if gjs -m "$repo_root/tests/integration/dbus-client.js" summary \
             >"$pending" 2>/dev/null &&

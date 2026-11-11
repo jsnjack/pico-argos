@@ -35,9 +35,10 @@ output_root=$(cd "$output_root" && pwd)
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "$script_dir/../.." && pwd)
 uuid=pico-argos@jsnjack.github.io
-schema=org.gnome.shell.extensions.pico-argos
+# shellcheck source=tests/performance/live-config.sh
+source "$script_dir/live-config.sh"
 plugin_root="${XDG_CONFIG_HOME:-${HOME:?HOME is not set}/.config}/pico-argos/plugins"
-for command_name in gdbus gjs gnome-extensions gsettings jq make; do
+for command_name in gdbus gjs gnome-extensions jq make; do
     command -v "$command_name" >/dev/null || {
         echo "Missing acceptance command: $command_name" >&2
         exit 1
@@ -52,20 +53,7 @@ if ! gnome-extensions info "$uuid" >/dev/null 2>&1; then
     exit 1
 fi
 
-# gnome-extensions install places the schema only inside the extension's own
-# directory; it is never compiled into a system/user glib-2.0/schemas path,
-# so the standalone gsettings CLI cannot see it without an explicit schema
-# directory, unlike GNOME Shell itself, which loads extension schemas from
-# their own directory internally.
-extension_schema_dir="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/$uuid/schemas"
-if [[ ! -f "$extension_schema_dir/gschemas.compiled" ]]; then
-    echo "Compiled schema missing at $extension_schema_dir; reinstall with 'make install'" >&2
-    exit 1
-fi
-export GSETTINGS_SCHEMA_DIR=$extension_schema_dir
-
-original_disabled=$(gsettings get "$schema" disabled-plugins)
-original_diagnostics=$(gsettings get "$schema" diagnostics-mode)
+live_config_backup "$output_root"
 original_enabled=false
 if gnome-extensions list --enabled | grep -qx "$uuid"; then
     original_enabled=true
@@ -82,8 +70,7 @@ cleanup() {
             rm -rf -- "$path"
         fi
     done
-    gsettings set "$schema" disabled-plugins "$original_disabled" >/dev/null
-    gsettings set "$schema" diagnostics-mode "$original_diagnostics" >/dev/null
+    live_config_restore
     if [[ $original_enabled == true ]]; then
         gnome-extensions enable "$uuid" >/dev/null 2>&1
     fi
@@ -118,6 +105,9 @@ stage_plugin "$script_dir/plugins/perf-changing" perf-changing
 stage_plugin "$script_dir/plugins/perf-oneshot" perf-oneshot
 for name in system-monitor dependabot pull-reviews vpn weather; do
     stage_plugin "$repo_root/plugins/$name" "perf-full-$name"
+    # The staged copy runs with the installed plugin's config.json settings.
+    live_config_set --arg from "$name" --arg to "perf-full-$name" \
+        '.plugins[$to] = (.plugins[$from] // {})'
 done
 
 all_plugins=()
@@ -140,19 +130,14 @@ export PICO_ARGOS_PRESENTATION_CLIENT=$presentation_client
 "$script_dir/monitor-state.js" --require-dual-120 \
     >"$output_root/monitor-state.json"
 
-variant_for_disabled() {
-    local enabled_list=" $1 "
-    local value='['
-    local id
-    for id in "${all_plugins[@]}"; do
-        if [[ $enabled_list == *" $id "* ]]; then
-            continue
-        fi
-        value+="'$id',"
-    done
-    value=${value%,}
-    value+=']'
-    printf '%s' "$value"
+# Enables exactly the listed staged plugins in config.json and disables the rest.
+set_enabled_plugins() {
+    local enabled_json all_json
+    # shellcheck disable=SC2086 # the space-separated id list is split on purpose
+    enabled_json=$(jq -cn '$ARGS.positional' --args $1)
+    all_json=$(jq -cn '$ARGS.positional' --args "${all_plugins[@]}")
+    live_config_set --argjson enabled "$enabled_json" --argjson all "$all_json" \
+        'reduce $all[] as $id (.; .plugins[$id].enabled = ($enabled | index($id) != null))'
 }
 
 wait_for_runtime_count() {
@@ -195,7 +180,7 @@ apply_scenario() {
         return
     fi
     enabled=$(scenario_plugins "$scenario")
-    gsettings set "$schema" disabled-plugins "$(variant_for_disabled "$enabled")"
+    set_enabled_plugins "$enabled"
     gnome-extensions enable "$uuid" >/dev/null
     local expected=0
     if [[ -n $enabled ]]; then
@@ -223,7 +208,7 @@ capture() {
 
 failures=0
 for mode in summary off; do
-    gsettings set "$schema" diagnostics-mode "'$mode'"
+    live_config_set --arg mode "$mode" '.extension.diagnosticsMode = $mode'
     for scenario in empty constant changing oneshot full; do
         comparison_args=()
         for pair in $(seq 1 "$pairs"); do
@@ -248,7 +233,7 @@ for mode in summary off; do
 done
 
 if ((one_hour_seconds != 0)); then
-    gsettings set "$schema" diagnostics-mode "'summary'"
+    live_config_set '.extension.diagnosticsMode = "summary"'
     capture summary full steady-state scenario "$one_hour_seconds"
     if ! "$script_dir/analyze-steady-state.js" \
         "$output_root/summary-full-pair-steady-state-scenario/summary-before.json" \

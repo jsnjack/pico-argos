@@ -21,9 +21,11 @@ const RESERVED_ENVIRONMENT = new Set([
     'PICO_ARGOS_PROTOCOL',
     'PICO_ARGOS_MENU_OPEN',
     'PICO_ARGOS_PLUGIN_ID',
+    'PICO_ARGOS_CONFIG',
 ]);
 const MODES = new Set(['oneshot', 'stream']);
-const POSITIONS = new Set(['left', 'center', 'center-end', 'right']);
+/** Panel positions a manifest or a config.json plugin entry may name. */
+export const PLUGIN_POSITIONS = new Set(['left', 'center', 'center-end', 'right']);
 const FAILURE_POLICIES = new Set(['keep-last', 'hide', 'show-error']);
 const COMMON_KEYS = new Set([
     'manifestVersion',
@@ -93,7 +95,7 @@ export function validateManifest(value, pluginDirectory, directoryId) {
     }
 
     const command = validateCommand(value.command, pluginDirectory);
-    if (!POSITIONS.has(value.position))
+    if (!PLUGIN_POSITIONS.has(value.position))
         throw new ManifestError('Manifest position is invalid');
     requireInteger(value.order, 'Manifest order');
 

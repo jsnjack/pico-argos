@@ -151,14 +151,15 @@ tests/performance/run-acceptance.sh /path/to/new-output-dir
 
 Preconditions, all enforced: a Wayland session (`XDG_SESSION_TYPE=wayland`),
 the exact package already installed (`gnome-extensions info` succeeds), and
-`gdbus`/`gjs`/`gnome-extensions`/`gsettings`/`jq`/`make` on `PATH`. The output
+`gdbus`/`gjs`/`gnome-extensions`/`jq`/`make` on `PATH`. The output
 directory must not already exist.
 
 It stages isolated `perf-constant`/`perf-changing`/`perf-oneshot` fixtures
 plus `perf-full-<name>` copies of every reference plugin
 (`system-monitor`, `dependabot`, `pull-reviews`, `vpn`, `weather` — the
-weather copy preserves the exact `weather.yauhen.cc` source), verifies the
-dual-120-Hz layout, then for each of `diagnostics-mode` `summary`/`off` and
+weather copy preserves the exact `weather.yauhen.cc` source). Each copy gets
+the installed plugin's `config.json` settings. The runner then verifies the
+dual-120-Hz layout and, for each `extension.diagnosticsMode` of `summary`/`off` and
 each scenario (`empty`, `constant`, `changing`, `oneshot`, `full`) captures
 `PICO_ARGOS_PAIRS` (default 5, 5–20) interleaved baseline/scenario pairs at
 `PICO_ARGOS_RUN_SECONDS` (default 60, 30–3600) each, alternating which role
@@ -166,8 +167,8 @@ runs first per pair, and compares them (step 4). It then captures one
 continuous `PICO_ARGOS_ONE_HOUR_SECONDS` (default 3,600; 0 disables it;
 otherwise 3,600–86,400) full-workload run and analyzes it (step 5).
 
-Original extension enablement, `disabled-plugins`, and `diagnostics-mode`
-are restored on exit, interrupt, or termination via an idempotent cleanup
+Original extension enablement and the exact original `config.json` (or its
+absence) are restored on exit, interrupt, or termination via an idempotent cleanup
 trap; staged `perf-*` plugin directories are removed. `result.json` in the
 output directory summarizes pass/fail across every comparison and the
 one-hour check; a nonzero exit means at least one comparison or the
@@ -194,7 +195,7 @@ Before starting:
 2. Log out and back in once if its installed JavaScript changed.
 3. Enable pico-argos and the normal plugins whose redraw workload matters.
 4. Install the probe dependencies from step 1 and ensure `gdbus`, `gjs`,
-   `gnome-extensions`, `gsettings`, `jq`, `journalctl`, and `pidstat` are
+   `gnome-extensions`, `jq`, `journalctl`, and `pidstat` are
    available. `perf` is optional.
 
 The output path must not already exist:
@@ -215,9 +216,10 @@ roles, probe compilation, and report generation. It normally completes in about
 The live extension and plugin set stay enabled for both roles. The baseline
 writes changed label text and relies on Clutter's automatic damage. The scenario
 performs the identical write and additionally queues a redraw on the parent
-panel button. The runner changes the hidden `performance-explicit-redraw`
-setting in the already-loaded Shell and confirms the selected branch over D-Bus;
-it does not reload the extension between roles.
+panel button. The runner changes `extension.explicitPanelRedraw` in
+`config.json`, which the already-loaded Shell applies live, confirms the
+selected branch over D-Bus, and restores the original file on exit; it does
+not reload the extension between roles.
 
 Five pairs alternate baseline/scenario order to reduce temperature and
 time-order bias. A continuously committing 64×64 Wayland surface records actual

@@ -2,7 +2,6 @@
   "name": "pico-argos",
   "description": "Renders bounded structured output from executable plugins.",
   "uuid": "pico-argos@jsnjack.github.io",
-  "settings-schema": "org.gnome.shell.extensions.pico-argos",
   "shell-version": [
     "50",
     "51"

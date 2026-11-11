@@ -8,8 +8,8 @@ uuid=pico-argos@jsnjack.github.io
 actor_uuid=pico-argos-actor-test@jsnjack.github.io
 package="$repo_root/dist/$uuid.shell-extension.zip"
 
-for required in cc dbus-run-session gdbus gjs glib-compile-schemas gnome-extensions \
-    gnome-shell gsettings jq pgrep pkg-config rg unzip wayland-scanner; do
+for required in cc dbus-run-session gdbus gjs gnome-extensions \
+    gnome-shell jq pgrep pkg-config rg unzip wayland-scanner; do
     if ! command -v "$required" >/dev/null 2>&1; then
         echo "Missing required integration command: $required" >&2
         exit 1
@@ -69,7 +69,6 @@ mkdir -p "$extension_dir" "$actor_dir/lib" "$plugin_dir" \
     "$test_root/cache" "$test_root/runtime"
 chmod 700 "$test_root/runtime"
 unzip -q "$package" -d "$extension_dir"
-glib-compile-schemas --strict "$extension_dir/schemas"
 cp "$repo_root/tests/fixtures/plugins/smoke/plugin.json" "$plugin_dir/"
 cp "$repo_root/tests/fixtures/plugins/smoke/run" "$plugin_dir/"
 chmod 700 "$plugin_dir/run"

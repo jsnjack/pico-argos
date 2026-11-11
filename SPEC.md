@@ -264,8 +264,9 @@ pico-argos@jsnjack.github.io/
     render.test.js
     diagnostics.js
     diagnostics.test.js
-  schemas/
-    org.gnome.shell.extensions.pico-argos.gschema.xml
+    config.js
+    config.test.js
+    config-monitor.js
 tests/
   fixtures/
   integration/
@@ -462,19 +463,14 @@ and opportunities to trigger separate compositor frames.
 
 ### 7.8 Plugin Configuration
 
-Field selection, GPU device, disk device, network interface, and sampling
-intervals belong to the reference plugin's own configuration. Its defaults are
-250 ms for CPU, GPU, and network, 500 ms for disk, and 1,000 ms for memory. The
-extension neither defines nor parses those domain-specific values. Position,
-order, process limits, and failure behavior remain in the universal manifest.
-
-The extension's GSettings schema is
-`org.gnome.shell.extensions.pico-argos` and contains two persistent settings:
-
-| Key | Type | Default | Constraint |
-|---|---|---|---|
-| `diagnostics-mode` | `s` | `summary` | `summary` or `off`; trace is transient |
-| `disabled-plugins` | `as` | `[]` | Validated discovered plugin identifiers to keep stopped and unrendered |
+Field selection, GPU device, disk device, network interface, sampling
+intervals, and severity thresholds are the reference plugin's own settings in
+its `plugins."system-monitor"` entry of `config.json` (Section 8.5). Its
+defaults are 250 ms for CPU, GPU, and network, 500 ms for disk, and 1,000 ms
+for memory. The extension passes those values through without defining or
+interpreting them. Process limits and failure behavior remain in the universal
+manifest; position and order default to the manifest and may be overridden in
+`config.json`.
 
 ## 8. Universal Plugin Model
 
@@ -569,6 +565,7 @@ The child receives a minimal environment containing `HOME`, `PATH`, `LANG`,
 PICO_ARGOS_PROTOCOL=<manifest protocol version>
 PICO_ARGOS_MENU_OPEN=true|false  # one-shot only
 PICO_ARGOS_PLUGIN_ID=<id>
+PICO_ARGOS_CONFIG=<the plugin's config.json settings as compact JSON>
 ```
 
 ### 8.3 Output Protocol
@@ -749,6 +746,66 @@ UTF-8, oversized output, rate-limit breach, invalid JSON, or schema violation.
   manifest changes, the extension is re-enabled, or the user explicitly
   restarts it. This prevents permanent restart storms.
 
+### 8.5 User Configuration
+
+All user configuration lives in one optional file:
+
+```text
+$XDG_CONFIG_HOME/pico-argos/config.json
+```
+
+Example:
+
+```json
+{
+  "extension": {
+    "diagnosticsMode": "summary",
+    "explicitPanelRedraw": true
+  },
+  "plugins": {
+    "system-monitor": {
+      "position": "left",
+      "order": 0,
+      "fastIntervalMs": 1000,
+      "thresholds": {"cpu": {"warning": 80, "critical": 90}}
+    },
+    "weather": {"enabled": false}
+  }
+}
+```
+
+- A missing or whitespace-only file means every default.
+- The file is at most 64 KiB of UTF-8 JSON, a regular file owned by the current
+  user, and not group or world writable.
+- Top-level keys are `extension` and `plugins`; unknown keys are rejected.
+- `extension.diagnosticsMode` is `summary` (default) or `off` (Section 12).
+- `extension.explicitPanelRedraw` is a boolean, default `true`. It selects the
+  explicit panel redraw path and exists for focused physical redraw
+  comparisons.
+- `plugins` maps at most 64 plugin IDs to objects. An entry for a plugin that
+  is not installed is valid and ignored.
+- The extension reads three keys of a plugin's object: `enabled` (boolean,
+  default `true`; `false` keeps the plugin stopped and unrendered), and
+  `position` and `order`, which override the manifest values under the same
+  constraints.
+- Every other key of a plugin's object is that plugin's own settings. The
+  extension serializes them as one compact JSON object into
+  `PICO_ARGOS_CONFIG` and never interprets them; a plugin without an entry
+  receives `{}`. Plugins validate their settings strictly and MUST NOT read
+  configuration from other files or from non-secret environment variables.
+- Secrets such as access tokens stay out of `config.json`. Plugins receive them
+  through `passEnvironment`.
+- The extension reads the file asynchronously before it starts any plugin, then
+  watches it with the same 250-ms debounce as plugin directories. A change
+  restarts only plugins whose enabled state, placement, or settings changed,
+  and applies the diagnostics mode in place.
+- An invalid file records a `config.json` error in diagnostics and keeps the
+  last valid configuration, or the defaults if none has loaded. It never stops
+  running plugins.
+- The preferences window edits `extension.diagnosticsMode` and each plugin's
+  `enabled` value, keeps every other key, and refuses to write over an invalid
+  file.
+
 ## 9. Runtime Scheduling and Subprocess Execution
 
 The one-shot scheduler uses `GLib.get_monotonic_time()` and one timer for all
@@ -919,8 +976,8 @@ Performance observability is a product feature. It has three modes:
 | `trace` | Time-limited per-cycle events plus optional stage timing hooks |
 | `off` | Errors only; intended for comparison measurements |
 
-The persistent GSettings key `diagnostics-mode` accepts `summary` or `off` and
-defaults to `summary`. `trace` is a transient overlay started through the
+The persistent `extension.diagnosticsMode` value in `config.json` accepts
+`summary` or `off` and defaults to `summary`. `trace` is a transient overlay started through the
 diagnostic interface; when it ends, the extension returns to the persistent
 mode.
 
@@ -1107,8 +1164,8 @@ Benefits:
 - no `jq`, `bc`, `awk`, `kazy`, `free`, `ip`, `cat`, or shell pipelines
 
 The configured disk override MUST support the existing host mapping during
-migration. Each host stores its resolved or explicit device in the plugin's own
-configuration, not extension GSettings.
+migration. Each host stores its resolved or explicit device in the plugin's
+`config.json` entry, not in extension preferences.
 
 ### 13.2 Dependabot
 
@@ -1164,7 +1221,7 @@ Required behavior:
   UV index, rain description, and nonzero rain timeline entries.
 - Preserve the last valid forecast on transient failure.
 - Resolve the request location from the first available source: explicit
-  coordinates in `weather.json`, the city pinned in GNOME Weather, one bounded
+  coordinates in its `config.json` entry, the city pinned in GNOME Weather, one bounded
   GeoClue detection, the cached last detection, then configured fallback
   coordinates. Absent every source, omit coordinates and accept the service
   default.

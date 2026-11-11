@@ -61,8 +61,9 @@ chmod -R go-w "$plugin_root/weather"
 `make install_plugins` runs the equivalent copy for every reference plugin
 under [`plugins/`](./plugins/) in one step. It copies each plugin directory's
 contents into `$XDG_CONFIG_HOME/pico-argos/plugins/<plugin-id>/` without
-deleting the destination first, so a plugin-local `config.json` created at
-runtime survives repeated runs.
+deleting the destination first. Plugin settings never live in the plugin
+directory; they live in the plugin's object in
+`$XDG_CONFIG_HOME/pico-argos/config.json`.
 
 The checked-in reference `run.js` files are executable and copied with that
 mode. Their manifests still use the specification's explicit
@@ -76,19 +77,40 @@ Prefer atomic temporary-file replacement for manifests and executables. The
 registry debounces changes and retains the last valid definition while a new
 manifest is incomplete or invalid.
 
-Users enable and disable discovered plugins from the extension's General
-preferences page. That switch updates the core-owned `disabled-plugins`
-GSettings key, immediately stops or starts the direct child, and removes or
-restores its panel UI. Extension authors and agents must not add an `enabled`
-manifest field, rename plugin files to toggle them, or rewrite a plugin's
-domain configuration. Unknown manifest fields remain a protocol error.
+## Configuring plugins
 
-Environment variables are opt-in through `passEnvironment`. Variables added to
-a terminal after GNOME Shell starts are not retroactively visible to the Shell.
-For reference GitHub plugins, place the required values in the session startup
-environment and log out/in. Never put tokens in argv, stdout, menu text,
-diagnostics, or a manifest. A wrapper may read a user-private secret file when
-session environment configuration is unsuitable.
+All user configuration lives in `$XDG_CONFIG_HOME/pico-argos/config.json`.
+Each plugin has an optional object under `plugins`, keyed by plugin ID:
+
+```json
+{
+  "plugins": {
+    "weather": {"enabled": true, "order": 5, "location": "auto"}
+  }
+}
+```
+
+The extension reads `enabled`, `position`, and `order` from that object.
+`enabled: false` keeps the plugin stopped and unrendered; the General
+preferences page toggles the same value. `position` and `order` override the
+manifest. Every other key is the plugin's own settings: the extension passes
+them, unchanged, as one compact JSON object in the `PICO_ARGOS_CONFIG`
+environment variable (`{}` when the plugin has no object). Saving the file
+restarts only the plugins whose object changed.
+
+A plugin reads its settings only from `PICO_ARGOS_CONFIG`, validates them
+strictly, and must not read another configuration file or a non-secret
+environment variable. Extension authors and agents must not add an `enabled`
+manifest field or rename plugin files to toggle them. Unknown manifest fields
+remain a protocol error.
+
+Secrets stay out of `config.json`. A plugin opts in to them through
+`passEnvironment`. Variables added to a terminal after GNOME Shell starts are
+not retroactively visible to the Shell; for the reference GitHub plugins, put
+`GITHUB_TOKEN` in the session startup environment and log out/in. Never put
+tokens in argv, stdout, menu text, diagnostics, a manifest, or `config.json`.
+A wrapper may read a user-private secret file when session environment
+configuration is unsuitable.
 
 ## Choosing an execution mode
 

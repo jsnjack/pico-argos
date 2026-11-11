@@ -5,10 +5,9 @@ SRC_DIR := $(UUID)
 BUILD_DIR := build
 DIST_DIR := dist
 ESLINT := node_modules/.bin/eslint
-SCHEMAS := $(wildcard $(SRC_DIR)/schemas/*.gschema.xml)
 PACKAGE := $(DIST_DIR)/$(UUID).shell-extension.zip
 
-.PHONY: check agents-size spec-check format-check lint test schemas package package-check integration-test install install_plugins standards clean
+.PHONY: check agents-size spec-check format-check lint test stage package package-check integration-test install install_plugins standards clean
 
 # Every agent session loads AGENTS.md whole, and Codex reads only its first
 # 32 KiB: keep it under the limit (AGENTS.universal.md, "AGENTS.md size").
@@ -54,35 +53,27 @@ test:
 		for test_file in "$${tests[@]}"; do gjs -m "$$test_file"; done; \
 	fi
 
-schemas:
+stage:
 	@rm -rf "$(BUILD_DIR)/$(UUID)"
-	@mkdir -p "$(BUILD_DIR)/$(UUID)/lib" "$(BUILD_DIR)/$(UUID)/schemas"
+	@mkdir -p "$(BUILD_DIR)/$(UUID)/lib"
 	@cp "$(SRC_DIR)"/*.js "$(SRC_DIR)"/*.json "$(SRC_DIR)"/*.css "$(BUILD_DIR)/$(UUID)/"
 	@find "$(SRC_DIR)/lib" -maxdepth 1 -type f -name '*.js' -not -name '*.test.js' \
 		-exec cp {} "$(BUILD_DIR)/$(UUID)/lib/" \;
-	@if compgen -G "$(SRC_DIR)/schemas/*.gschema.xml" >/dev/null; then \
-		cp "$(SRC_DIR)"/schemas/*.gschema.xml "$(BUILD_DIR)/$(UUID)/schemas/"; \
-		glib-compile-schemas --strict "$(BUILD_DIR)/$(UUID)/schemas"; \
-	else \
-		echo "==> schemas: no schemas yet"; \
-	fi
 
 package-check: package
-	@test -s "$(BUILD_DIR)/$(UUID)/schemas/gschemas.compiled"
 	@unzip -Z1 "$(PACKAGE)" | rg -q '^lib/extension-controller\.js$$'
 	@unzip -Z1 "$(PACKAGE)" | rg -q '^prefs\.js$$'
-	@unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/org\.gnome\.shell\.extensions\.pico-argos\.gschema\.xml$$'
-	@! unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/gschemas\.compiled$$'
+	@! unzip -Z1 "$(PACKAGE)" | rg -q '^schemas/'
 	@! unzip -Z1 "$(PACKAGE)" | rg -q '\.test\.js$$'
 	@! unzip -Z1 "$(PACKAGE)" | rg -q '^plugins/'
 
 integration-test: package
 	@tests/integration/nested-shell.sh
 
-package: schemas
+package: stage
 	@mkdir -p "$(DIST_DIR)"
 	@gnome-extensions pack --force --out-dir="$(DIST_DIR)" \
-		--extra-source=lib --extra-source=schemas "$(BUILD_DIR)/$(UUID)"
+		--extra-source=lib "$(BUILD_DIR)/$(UUID)"
 
 install: package
 	@gnome-extensions install --force "$(DIST_DIR)/$(UUID).shell-extension.zip"

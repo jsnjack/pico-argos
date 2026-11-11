@@ -12,7 +12,7 @@ shell_log="$test_root/shell.log"
 prefs_log="$test_root/preferences.log"
 summary_file="$test_root/summary.json"
 presentation_file="$test_root/presentation.ndjson"
-export GSETTINGS_SCHEMA_DIR="$test_root/data/gnome-shell/extensions/$uuid/schemas"
+config_file="$test_root/config/pico-argos/config.json"
 
 wait_for_summary() {
     local filter=$1
@@ -28,6 +28,13 @@ wait_for_summary() {
     echo "Timed out waiting for diagnostic summary: $filter" >&2
     cat "$shell_log" >&2
     return 1
+}
+
+# Replaces config.json atomically, as an editor or the preferences would.
+write_config() {
+    printf '%s\n' "$1" >"$config_file.new"
+    chmod 600 "$config_file.new"
+    mv "$config_file.new" "$config_file"
 }
 
 shell_pid=
@@ -93,25 +100,31 @@ jq -e '
     .diagnostics.phases["semantic-diff"].count > 0
 ' "$summary_file" >/dev/null
 
-gsettings set org.gnome.shell.extensions.pico-argos disabled-plugins "['smoke']"
+write_config '{"plugins": {"smoke": {"enabled": false}}}'
 wait_for_summary '.runtime.plugins | length == 0'
 if pgrep -f "$plugin_dir/run" >/dev/null; then
-    echo 'Disabled plugin child survived its preferences toggle' >&2
+    echo 'Disabled plugin child survived its config.json toggle' >&2
     exit 1
 fi
-gsettings set org.gnome.shell.extensions.pico-argos disabled-plugins "[]"
+write_config '{}'
 wait_for_summary '.runtime.plugins | length == 1 and .[0].processState == "running"'
 
-gsettings set org.gnome.shell.extensions.pico-argos diagnostics-mode off
+write_config '{"extension": {"diagnosticsMode": "off"}}'
 wait_for_summary '.diagnostics.mode == "off"'
-gsettings set org.gnome.shell.extensions.pico-argos diagnostics-mode summary
+write_config '{}'
 wait_for_summary '.diagnostics.mode == "summary"'
+
+write_config '{"plugins": {"smoke": '
+wait_for_summary '[.registryErrors[] | select(.id == "config.json")] | length == 1'
+jq -e '.runtime.plugins[0].processState == "running" and .diagnostics.mode == "summary"' \
+    "$summary_file" >/dev/null
+write_config '{}'
 
 cp "$plugin_dir/plugin.json" "$plugin_dir/plugin.json.invalid"
 jq '.timeoutMs = 5000' "$plugin_dir/plugin.json" >"$plugin_dir/plugin.json.new"
 chmod 600 "$plugin_dir/plugin.json.new"
 mv "$plugin_dir/plugin.json.new" "$plugin_dir/plugin.json"
-wait_for_summary '.registryErrors | length > 0'
+wait_for_summary '[.registryErrors[] | select(.id != "config.json")] | length > 0'
 jq -e '.runtime.plugins[0].processState == "running"' "$summary_file" >/dev/null
 
 jq '.order = 11' "$plugin_dir/plugin.json.invalid" >"$plugin_dir/plugin.json.new"

@@ -12,13 +12,16 @@ import {
     DIAGNOSTIC_INTERFACE,
     DIAGNOSTIC_OBJECT_PATH,
 } from './lib/diagnostic-service.js';
+import {
+    configPath,
+    configurePlugin,
+    DEFAULT_CONFIG,
+    isPluginEnabled,
+    parseConfig,
+    updateConfigText,
+} from './lib/config.js';
 import {DURATION_BUCKETS_US} from './lib/diagnostics.js';
 import {compareManifests} from './lib/manifest.js';
-import {
-    isPluginEnabled,
-    normalizeDisabledPluginIds,
-    setPluginEnabled,
-} from './lib/plugin-enable.js';
 import {PluginRegistry} from './lib/plugin-registry.js';
 
 const REFRESH_SECONDS = 2;
@@ -27,7 +30,9 @@ const REFRESH_SECONDS = 2;
 export default class PicoArgosPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         this._window = window;
-        this._settings = this.getSettings();
+        this._configPath = configPath();
+        this._config = DEFAULT_CONFIG;
+        this._configError = null;
         this._healthRows = [];
         this._phaseRows = [];
         this._refreshSourceId = 0;
@@ -36,10 +41,15 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
         this._lastExportPath = null;
         this._plugins = new Map();
         this._pluginRows = [];
-        this._updatingPluginSwitches = false;
-        this._settingsSignalId = this._settings.connect(
-            'changed::disabled-plugins',
-            () => this._syncPluginSwitches());
+        this._updatingControls = false;
+        this._loadConfig();
+        this._configMonitor = Gio.File.new_for_path(this._configPath).monitor_file(
+            Gio.FileMonitorFlags.WATCH_MOVES,
+            null);
+        this._configSignalId = this._configMonitor.connect('changed', () => {
+            this._loadConfig();
+            this._syncConfigControls();
+        });
 
         window.add(this._buildGeneralPage());
         this._diagnosticsPage = this._buildDiagnosticsPage();
@@ -60,6 +70,11 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
             title: 'General',
             icon_name: 'preferences-system-symbolic',
         });
+        const configGroup = new Adw.PreferencesGroup({title: 'Configuration'});
+        this._configStatus = new Adw.ActionRow({title: 'config.json'});
+        configGroup.add(this._configStatus);
+        page.add(configGroup);
+
         this._pluginGroup = new Adw.PreferencesGroup({title: 'Plugins'});
         this._pluginStatus = new Adw.ActionRow({
             title: 'Discovering plugins',
@@ -70,18 +85,82 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
 
         const group = new Adw.PreferencesGroup({title: 'Diagnostics overhead'});
         const modes = Gtk.StringList.new(['Summary', 'Off']);
-        const row = new Adw.ComboRow({
+        this._diagnosticsModeRow = new Adw.ComboRow({
             title: 'Persistent mode',
             subtitle: 'Summary is bounded; Off keeps only error behavior.',
             model: modes,
-            selected: this._settings.get_string('diagnostics-mode') === 'off' ? 1 : 0,
+            selected: this._config.extension.diagnosticsMode === 'off' ? 1 : 0,
         });
-        row.connect('notify::selected', () => this._settings.set_string(
-            'diagnostics-mode',
-            row.selected === 1 ? 'off' : 'summary'));
-        group.add(row);
+        this._diagnosticsModeRow.connect('notify::selected', () => {
+            if (!this._updatingControls) {
+                this._writeConfig(
+                    ['extension', 'diagnosticsMode'],
+                    this._diagnosticsModeRow.selected === 1 ? 'off' : 'summary');
+            }
+        });
+        group.add(this._diagnosticsModeRow);
         page.add(group);
+        this._syncConfigStatus();
         return page;
+    }
+
+    /** Reads config.json synchronously; the preferences run outside the Shell. */
+    _loadConfig() {
+        try {
+            this._config = parseConfig(this._readConfigText());
+            this._configError = null;
+        } catch (error) {
+            this._configError = error.message;
+        }
+    }
+
+    _readConfigText() {
+        try {
+            const [, bytes] = GLib.file_get_contents(this._configPath);
+            return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
+        } catch (error) {
+            if (error.matches?.(GLib.FileError, GLib.FileError.NOENT))
+                return '';
+            throw error;
+        }
+    }
+
+    /** Changes one value in config.json, keeping every other key. */
+    _writeConfig(path, value) {
+        try {
+            const next = updateConfigText(this._readConfigText(), path, value);
+            GLib.mkdir_with_parents(GLib.path_get_dirname(this._configPath), 0o700);
+            Gio.File.new_for_path(this._configPath).replace_contents(
+                new TextEncoder().encode(next),
+                null,
+                false,
+                Gio.FileCreateFlags.NONE,
+                null);
+            this._config = parseConfig(next);
+            this._configError = null;
+        } catch (error) {
+            this._configError = error.message;
+        }
+        this._syncConfigControls();
+    }
+
+    _syncConfigControls() {
+        if (this._window === null)
+            return;
+        this._syncConfigStatus();
+        this._syncPluginSwitches();
+    }
+
+    _syncConfigStatus() {
+        const valid = this._configError === null;
+        this._configStatus.subtitle = valid
+            ? `${this._configPath}. Switches below edit this file.`
+            : `${this._configError}. Fix the file; the switches are disabled until then.`;
+        this._diagnosticsModeRow.sensitive = valid;
+        this._updatingControls = true;
+        this._diagnosticsModeRow.selected =
+            this._config.extension.diagnosticsMode === 'off' ? 1 : 0;
+        this._updatingControls = false;
     }
 
     _startPluginRegistry() {
@@ -113,18 +192,18 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
     }
 
     _renderPluginRows(errorCount = 0) {
-        const disabled = normalizeDisabledPluginIds(
-            this._settings.get_strv('disabled-plugins'));
-        const plugins = [...this._plugins.values()].sort((left, right) =>
-            compareManifests(left.manifest, right.manifest));
+        const plugins = [...this._plugins.values()]
+            .map(plugin => configurePlugin(plugin, this._config.plugins.get(plugin.id)))
+            .sort((left, right) => compareManifests(left.manifest, right.manifest));
         const rows = plugins.map(plugin => {
-            const enabled = isPluginEnabled(disabled, plugin.id);
+            const enabled = isPluginEnabled(this._config, plugin.id);
             const toggle = new Gtk.Switch({
                 active: enabled,
+                sensitive: this._configError === null,
                 valign: Gtk.Align.CENTER,
             });
             toggle.connect('notify::active', () => {
-                if (!this._updatingPluginSwitches)
+                if (!this._updatingControls)
                     this._setPluginEnabled(plugin.id, toggle.active);
             });
             const row = new Adw.ActionRow({
@@ -144,30 +223,27 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
             ? 'No valid plugins discovered'
             : `${plugins.length} plugin${plugins.length === 1 ? '' : 's'} available`;
         this._pluginStatus.subtitle = errorCount === 0
-            ? 'Changes apply immediately and persist without editing plugin files.'
+            ? 'Changes apply immediately and are saved in config.json.'
             : `${errorCount} plugin${errorCount === 1 ? '' : 's'} could not be loaded.`;
     }
 
     _setPluginEnabled(pluginId, enabled) {
-        const next = setPluginEnabled(
-            this._settings.get_strv('disabled-plugins'),
-            pluginId,
-            enabled);
-        this._settings.set_strv('disabled-plugins', next);
+        this._writeConfig(['plugins', pluginId, 'enabled'], enabled);
     }
 
     _syncPluginSwitches() {
-        const disabled = normalizeDisabledPluginIds(
-            this._settings.get_strv('disabled-plugins'));
-        this._updatingPluginSwitches = true;
+        this._updatingControls = true;
         for (const row of this._pluginRows) {
-            const enabled = isPluginEnabled(disabled, row._pluginId);
+            const enabled = isPluginEnabled(this._config, row._pluginId);
             row._toggle.active = enabled;
-            const plugin = this._plugins.get(row._pluginId);
+            row._toggle.sensitive = this._configError === null;
+            const plugin = configurePlugin(
+                this._plugins.get(row._pluginId),
+                this._config.plugins.get(row._pluginId));
             row.subtitle = `${plugin.manifest.mode} · ${plugin.manifest.position} · ` +
                 `${enabled ? 'enabled' : 'disabled'}`;
         }
-        this._updatingPluginSwitches = false;
+        this._updatingControls = false;
     }
 
     _buildDiagnosticsPage() {
@@ -383,10 +459,12 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
     _destroy() {
         this._preferenceRegistry?.cancel();
         this._preferenceRegistry = null;
-        if (this._settingsSignalId !== 0) {
-            this._settings.disconnect(this._settingsSignalId);
-            this._settingsSignalId = 0;
+        if (this._configSignalId !== 0) {
+            this._configMonitor.disconnect(this._configSignalId);
+            this._configSignalId = 0;
         }
+        this._configMonitor?.cancel();
+        this._configMonitor = null;
         if (this._refreshSourceId !== 0) {
             GLib.source_remove(this._refreshSourceId);
             this._refreshSourceId = 0;
@@ -399,7 +477,6 @@ export default class PicoArgosPreferences extends ExtensionPreferences {
             this._window.disconnect(this._closeSignalId);
             this._closeSignalId = 0;
         }
-        this._settings = null;
         this._plugins.clear();
         this._pluginRows = [];
         this._window = null;

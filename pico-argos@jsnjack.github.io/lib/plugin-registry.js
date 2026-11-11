@@ -17,7 +17,7 @@ const ENUMERATION_ATTRIBUTES = [
     Gio.FILE_ATTRIBUTE_STANDARD_NAME,
     Gio.FILE_ATTRIBUTE_STANDARD_TYPE,
 ].join(',');
-const SECURITY_ATTRIBUTES = [
+export const SECURITY_ATTRIBUTES = [
     Gio.FILE_ATTRIBUTE_STANDARD_TYPE,
     Gio.FILE_ATTRIBUTE_STANDARD_SIZE,
     Gio.FILE_ATTRIBUTE_UNIX_UID,
@@ -453,7 +453,7 @@ function closeEnumerator(enumerator) {
     });
 }
 
-function queryInfo(file, attributes, cancellable) {
+export function queryInfo(file, attributes, cancellable) {
     return new Promise((resolve, reject) => {
         file.query_info_async(
             attributes,
@@ -470,7 +470,7 @@ function queryInfo(file, attributes, cancellable) {
     });
 }
 
-async function loadBoundedContents(file, maximumBytes, cancellable) {
+export async function loadBoundedContents(file, maximumBytes, cancellable, context = 'Manifest') {
     const stream = await openFile(file, cancellable);
     const chunks = [];
     let totalBytes = 0;
@@ -478,7 +478,7 @@ async function loadBoundedContents(file, maximumBytes, cancellable) {
         for (;;) {
             const remainingProbeBytes = maximumBytes + 1 - totalBytes;
             if (remainingProbeBytes === 0)
-                throw new Error(`Manifest exceeds ${maximumBytes} bytes`);
+                throw new Error(`${context} exceeds ${maximumBytes} bytes`);
             const chunk = await readBytes(
                 stream,
                 Math.min(MANIFEST_READ_BYTES, remainingProbeBytes),
@@ -488,7 +488,7 @@ async function loadBoundedContents(file, maximumBytes, cancellable) {
             chunks.push(chunk);
             totalBytes += chunk.length;
             if (totalBytes > maximumBytes)
-                throw new Error(`Manifest exceeds ${maximumBytes} bytes`);
+                throw new Error(`${context} exceeds ${maximumBytes} bytes`);
         }
     } finally {
         await closeStream(stream);
@@ -545,7 +545,7 @@ function closeStream(stream) {
     });
 }
 
-function validateOwnedFile(info, userId, directory, context) {
+export function validateOwnedFile(info, userId, directory, context) {
     const expectedType = directory ? Gio.FileType.DIRECTORY : Gio.FileType.REGULAR;
     if (info.get_file_type() !== expectedType)
         throw new Error(`${context} has the wrong file type`);

@@ -19,10 +19,21 @@ for (const required of [
     'XDG_RUNTIME_DIR',
     'PICO_ARGOS_PROTOCOL',
     'PICO_ARGOS_PLUGIN_ID',
+    'PICO_ARGOS_CONFIG',
 ]) {
     if (!names.includes(required))
         throw new Error(`Minimal plugin environment omitted ${required}`);
 }
+if (!environment.includes('PICO_ARGOS_CONFIG={}'))
+    throw new Error('A plugin without a config.json entry did not receive empty settings');
+const configured = buildPluginEnvironment({
+    id: 'test',
+    passEnvironment: ['PICO_ARGOS_CONFIG'],
+    settingsJson: '{"statusUrl":"https://example.test"}',
+});
+if (!configured.includes('PICO_ARGOS_CONFIG={"statusUrl":"https://example.test"}') ||
+    configured.filter(entry => entry.startsWith('PICO_ARGOS_CONFIG=')).length !== 1)
+    throw new Error('Plugin settings were not passed exactly once in PICO_ARGOS_CONFIG');
 if (names.includes('PICO_ARGOS_MENU_OPEN'))
     throw new Error('Stream environment unexpectedly included menu-open state');
 if (!environment.includes('PATH=/usr/local/bin:/usr/bin:/bin'))

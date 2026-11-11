@@ -7,10 +7,7 @@ import {ExtensionController} from './lib/extension-controller.js';
 /** GNOME Shell lifecycle entry point for pico-argos. */
 export default class PicoArgosExtension extends Extension {
     enable() {
-        this._controller = new ExtensionController(
-            this,
-            this.getSettings(),
-            this.metadata);
+        this._controller = new ExtensionController(this, this.metadata);
         this._controller.enable();
     }
 

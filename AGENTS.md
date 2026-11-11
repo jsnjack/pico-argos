@@ -34,7 +34,6 @@ package.json                    Pinned project development tooling
 pico-argos@jsnjack.github.io/   Installable GNOME Shell 50–51 extension source
   extension.js                  Production lifecycle entry point
   lib/                          Diagnostics, runtime, state, and persistent rendering
-  schemas/                      Extension GSettings schema
 plugins/                        Reference protocol plugins, outside the extension artifact
 tests/                          Runner fixtures and nested-Shell integration tests
 ```
@@ -122,9 +121,16 @@ packaging or average CPU usage as performance acceptance.
 
 Plugin directories live under
 `$XDG_CONFIG_HOME/pico-argos/plugins/<plugin-id>/`. Each contains `plugin.json`
-and an executable declared by an argv array. The extension's GSettings schema
-is `org.gnome.shell.extensions.pico-argos`; domain-specific plugin configuration
-does not belong in that schema.
+and an executable declared by an argv array.
+
+All user configuration lives in one optional file,
+`$XDG_CONFIG_HOME/pico-argos/config.json` (SPEC Section 8.5): an `extension`
+object for the preferences and a `plugins` object keyed by plugin ID. The
+extension reads `enabled`, `position`, and `order` from a plugin's object and
+passes every other key to the plugin as JSON in `PICO_ARGOS_CONFIG`, without
+interpreting it. Plugins read no other configuration file and take only
+secrets such as `GITHUB_TOKEN` from `passEnvironment`. The extension has no
+GSettings schema; the preferences window edits `config.json`.
 
 ---
 

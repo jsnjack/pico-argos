@@ -22,6 +22,7 @@ export function buildPluginEnvironment(manifest, menuOpen = null) {
         ['XDG_RUNTIME_DIR', GLib.get_user_runtime_dir() ?? ''],
         ['PICO_ARGOS_PROTOCOL', String(manifest.protocolVersion ?? 1)],
         ['PICO_ARGOS_PLUGIN_ID', manifest.id],
+        ['PICO_ARGOS_CONFIG', manifest.settingsJson ?? '{}'],
     ]);
     if (menuOpen !== null)
         values.set('PICO_ARGOS_MENU_OPEN', menuOpen ? 'true' : 'false');
