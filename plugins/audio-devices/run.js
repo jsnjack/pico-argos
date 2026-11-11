@@ -9,12 +9,9 @@ import GObject from 'gi://GObject';
 import Wp from 'gi://Wp?version=0.5';
 import System from 'system';
 
-import {
-    audioSnapshot,
-    parseAudioRequest,
-    parseAudioConfig,
-} from './logic.js';
+import {audioSnapshot, parseAudioRequest} from './logic.js';
 import {isDevicePortVisible, parsePorts, portKey} from './ports.js';
+import {readAudioSettings} from './settings.js';
 
 const DEFAULT_SINK_CLASS = 'Audio/Sink';
 const DEFAULT_SOURCE_CLASS = 'Audio/Source';
@@ -51,7 +48,7 @@ const signalIds = [];
 const deviceSignalIds = new Map();
 
 try {
-    configuration = loadConfiguration();
+    configuration = readAudioSettings();
     Wp.init(Wp.InitFlags.PIPEWIRE);
     core = Wp.Core.new(null, null, null);
     await activate(core, Wp.CoreFeatures.CONNECTED);
@@ -565,25 +562,6 @@ function installObjectManager(source, objectManager) {
         });
         source.install_object_manager(objectManager);
     });
-}
-
-function loadConfiguration() {
-    const path = GLib.build_filenamev([
-        GLib.get_user_config_dir(),
-        'pico-argos',
-        'audio-devices.json',
-    ]);
-    const file = Gio.File.new_for_path(path);
-    if (!file.query_exists(null))
-        return parseAudioConfig(undefined);
-    const [ok, bytes] = file.load_contents(null);
-    if (!ok)
-        throw new Error('Reading audio configuration failed');
-    const data = new Uint8Array(bytes);
-    if (data.length > 64 * 1_024)
-        throw new Error('Audio configuration exceeds 64 KiB');
-    return parseAudioConfig(JSON.parse(
-        new TextDecoder('utf-8', {fatal: true}).decode(data)));
 }
 
 function fail(error) {

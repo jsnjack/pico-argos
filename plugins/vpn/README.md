@@ -2,8 +2,23 @@
 
 Copy this directory to `$XDG_CONFIG_HOME/pico-argos/plugins/vpn/`. It uses the
 original NordVPN public status endpoint at
-`https://web-api.nordvpn.com/v1/ips/info` by default; set `VPN_STATUS_URL` to
-another HTTPS endpoint returning a `protected` boolean and country field.
+`https://web-api.nordvpn.com/v1/ips/info` by default. To use another HTTPS
+endpoint returning a `protected` boolean and country field, set `statusUrl` in
+the `plugins.vpn` object of `$XDG_CONFIG_HOME/pico-argos/config.json`:
+
+```json
+{
+  "plugins": {
+    "vpn": {
+      "statusUrl": "https://web-api.nordvpn.com/v1/ips/info"
+    }
+  }
+}
+```
+
+`statusUrl` is the only setting. pico-argos passes the object to the plugin as
+JSON in the `PICO_ARGOS_CONFIG` environment variable; a URL that does not use
+HTTPS or an unknown key fails the refresh with an error that names it.
 
 A literal skull-and-crossbones glyph with monochrome text presentation (`☠︎`)
 appears only while protected. It uses `text` with `appearance: "accent"`

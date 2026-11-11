@@ -6,20 +6,11 @@ import Soup from 'gi://Soup?version=3.0';
 import System from 'system';
 
 import {pullReviewsSnapshot} from './logic.js';
+import {readPullReviewsSettings} from './settings.js';
 
 try {
     const token = requiredEnvironment('GITHUB_TOKEN');
-    const user = requiredEnvironment('GITHUB_USER');
-    const repositories = requiredEnvironment('GITHUB_REPOSITORIES')
-        .split(',').map(value => value.trim()).filter(Boolean);
-    if (repositories.length === 0 || repositories.length > 20 ||
-        repositories.some(value => !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)))
-        throw new Error('GITHUB_REPOSITORIES must list at most 20 owner/name values');
-    if (!/^[A-Za-z0-9-]+$/.test(user))
-        throw new Error('GITHUB_USER is invalid');
-    const issueRepository = GLib.getenv('GITHUB_ISSUE_REPOSITORY') ?? 'surfly/it';
-    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(issueRepository))
-        throw new Error('GITHUB_ISSUE_REPOSITORY must have owner/name form');
+    const {user, repositories, issueRepository} = readPullReviewsSettings();
     const searchQuery = `is:pr is:open draft:false review-requested:${user}`;
     const data = requestGraphql(token, searchQuery);
     if (Array.isArray(data.errors) && data.errors.length !== 0)

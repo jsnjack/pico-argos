@@ -10,7 +10,7 @@
   "order": 30,
   "nice": 10,
   "reserveTextChars": 0,
-  "passEnvironment": ["VPN_STATUS_URL"],
+  "passEnvironment": [],
   "failurePolicy": "keep-last",
   "maxStaleMs": 30000
 }

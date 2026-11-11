@@ -26,15 +26,30 @@ name.
 
 ## Configuration
 
-Configuration is optional. Copy `config.example.json` to:
+Optional settings live in the `plugins.audio-devices` object of
+`$XDG_CONFIG_HOME/pico-argos/config.json`:
 
-```text
-$XDG_CONFIG_HOME/pico-argos/audio-devices.json
+```json
+{
+  "plugins": {
+    "audio-devices": {
+      "maxPanelNameChars": 18,
+      "aliases": {
+        "alsa_output.pci-0000_00_1f.3.analog-stereo": "Speakers",
+        "alsa_input.pci-0000_00_1f.3.analog-stereo": "Built-in mic"
+      }
+    }
+  }
+}
 ```
 
-`maxPanelNameChars` bounds each current device name to 6–48 characters.
-`aliases` maps exact PipeWire `node.name` values to concise panel/menu names.
-Use `wpctl status -n` to inspect node names.
+`maxPanelNameChars` bounds each current device name to 6–48 characters and
+defaults to 18. `aliases` maps exact PipeWire `node.name` values to concise
+panel/menu names, at most 64 of them, and is empty by default. Use
+`wpctl status -n` to inspect node names. pico-argos passes this object to the
+plugin as JSON in the `PICO_ARGOS_CONFIG` environment variable. An invalid
+object, an unknown key, or an out-of-range value stops the plugin with an
+error that names the problem.
 
 The plugin reacts to device hotplug, default-node changes, card route changes,
 and application-link changes, emits a heartbeat every five seconds, and treats

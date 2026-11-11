@@ -56,7 +56,7 @@ constant: the instantaneous voltage would make a resting battery's stored
 energy drift.
 
 Batteries scoped to a device — a mouse or a keyboard — are ignored. The first
-system battery in name order is used unless `config.json` names one.
+system battery in name order is used unless the `battery` setting names one.
 
 The adapter contract, the charging policy and the charge threshold change
 only when something is plugged in or a policy is set, and they cost about as
@@ -81,14 +81,20 @@ liveness and freshness clocks current while nothing is happening.
 
 ## Configuration
 
-`config.json` beside the plugin, with the defaults shown:
+Settings live in the `plugins.battery-power` object of
+`$XDG_CONFIG_HOME/pico-argos/config.json`. Every key is optional; the example
+shows the defaults:
 
 ```json
 {
-  "intervalMs": 2000,
-  "battery": "auto",
-  "smoothing": 0.25,
-  "hysteresisWatts": 0.4
+  "plugins": {
+    "battery-power": {
+      "intervalMs": 2000,
+      "battery": "auto",
+      "smoothing": 0.25,
+      "hysteresisWatts": 0.4
+    }
+  }
 }
 ```
 
@@ -99,6 +105,12 @@ liveness and freshness clocks current while nothing is happening.
 - `smoothing` is the weight of the newest sample in the average, above 0 and
   at most 1. Use 1 for the raw reading.
 - `hysteresisWatts` is 0 through 5.
+
+pico-argos passes this object to the plugin as JSON in the `PICO_ARGOS_CONFIG`
+environment variable. When the variable is not a JSON object, the plugin logs
+`Ignoring invalid config.json plugins.battery-power` and uses the defaults. An
+unknown key or an out-of-range value stops the plugin with an error that names
+the key.
 
 ## Behavior notes
 

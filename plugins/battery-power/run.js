@@ -11,13 +11,13 @@ import GioUnix from 'gi://GioUnix';
 import GLib from 'gi://GLib';
 
 import {
-    DEFAULT_HYSTERESIS_W,
-    DEFAULT_SMOOTHING,
     PowerDisplay,
+    SUPPLY_NAME_PATTERN,
     batterySnapshot,
     parseUevent,
     readingFromUevent,
 } from './logic.js';
+import {readBatteryPowerSettings} from './settings.js';
 
 const SUPPLY_ROOT = '/sys/class/power_supply';
 const MAX_UEVENT_BYTES = 16 * 1_024;
@@ -29,7 +29,6 @@ const SLOW_ATTRIBUTE_INTERVAL_MS = 15_000;
 const FRESHNESS_INTERVAL_MS = 15_000;
 const FAILURES_BEFORE_HIDING = 3;
 const HIDDEN_SNAPSHOT = '{"version":1,"type":"snapshot","panel":null,"menu":[]}';
-const SUPPLY_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 /** One attribute file kept open, re-read from its start on every cycle. */
 class StableReader {
@@ -59,7 +58,8 @@ class StableReader {
     }
 }
 
-const config = loadConfig();
+const config = readBatteryPowerSettings(
+    message => printerr(`[battery-power] ${message}`));
 const output = GioUnix.OutputStream.new(1, false);
 const encoder = new TextEncoder();
 const display = new PowerDisplay({
@@ -289,43 +289,6 @@ function listSupplies() {
         }
     }
     return names.sort();
-}
-
-function loadConfig() {
-    const defaults = {
-        intervalMs: 2_000,
-        battery: 'auto',
-        smoothing: DEFAULT_SMOOTHING,
-        hysteresisWatts: DEFAULT_HYSTERESIS_W,
-    };
-    let value = {};
-    try {
-        value = JSON.parse(readBoundedFile('config.json'));
-    } catch (error) {
-        const missing = error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND) ||
-            error.matches?.(GLib.FileError, GLib.FileError.NOENT);
-        if (!missing)
-            printerr(`[battery-power] Ignoring invalid config.json: ${error.message}`);
-    }
-    const unknown = Object.keys(value).find(key => !Object.hasOwn(defaults, key));
-    if (unknown !== undefined)
-        throw new Error(`Unknown config field: ${unknown}`);
-    const result = {...defaults, ...value};
-    // The ceiling keeps the emission gap inside the manifest's heartbeat
-    // deadline, which the freshness repeat is what satisfies.
-    if (!Number.isInteger(result.intervalMs) ||
-        result.intervalMs < 1_000 || result.intervalMs > 30_000)
-        throw new Error('intervalMs must be from 1000 through 30000');
-    if (typeof result.battery !== 'string' ||
-        (result.battery !== 'auto' && !SUPPLY_NAME_PATTERN.test(result.battery)))
-        throw new Error('battery must be auto or a power-supply name');
-    if (!Number.isFinite(result.smoothing) ||
-        result.smoothing <= 0 || result.smoothing > 1)
-        throw new Error('smoothing must be above 0 and at most 1');
-    if (!Number.isFinite(result.hysteresisWatts) ||
-        result.hysteresisWatts < 0 || result.hysteresisWatts > 5)
-        throw new Error('hysteresisWatts must be from 0 through 5');
-    return result;
 }
 
 function readBoundedFile(path) {

@@ -6,12 +6,11 @@ import Soup from 'gi://Soup?version=3.0';
 import System from 'system';
 
 import {dependabotSnapshot} from './logic.js';
+import {readDependabotSettings} from './settings.js';
 
 try {
     const token = requiredEnvironment('GITHUB_TOKEN');
-    const repository = requiredEnvironment('GITHUB_REPOSITORY');
-    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository))
-        throw new Error('GITHUB_REPOSITORY must have owner/name form');
+    const {repository} = readDependabotSettings();
     const alerts = requestJson(
         `https://api.github.com/repos/${repository}/dependabot/alerts` +
             '?state=open&severity=critical&per_page=100',

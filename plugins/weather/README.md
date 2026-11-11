@@ -18,7 +18,7 @@ The endpoint accepts optional `lat` and `lon` parameters and otherwise answers
 for its own default city. The plugin resolves coordinates from the first
 available source:
 
-1. Explicit coordinates in `weather.json`.
+1. Explicit coordinates in the `location` setting.
 2. The city pinned in GNOME Weather.
 3. One GeoClue detection at `city` accuracy, bounded by `detectTimeoutMs`.
 4. The cached last detection, valid for `cacheTtlMs`.
@@ -31,25 +31,42 @@ and never delays the refresh past its deadline. A successful detection is
 cached below `$XDG_CACHE_HOME/pico-argos/`, so a routine five-minute refresh
 performs no location lookup at all. Coordinates are rounded to four decimals.
 
-Optional configuration lives at:
-
-```text
-$XDG_CONFIG_HOME/pico-argos/weather.json
-```
+Optional settings live in the `plugins.weather` object of
+`$XDG_CONFIG_HOME/pico-argos/config.json`. This example selects IP mode and
+names a fallback city; the other keys show their defaults:
 
 ```json
 {
-  "location": "ip",
-  "cacheTtlMs": 1800000,
-  "detectTimeoutMs": 3000,
-  "useGnomeLocation": true
+  "plugins": {
+    "weather": {
+      "location": "ip",
+      "fallback": {"latitude": 52.3676, "longitude": 4.9041},
+      "cacheTtlMs": 1800000,
+      "detectTimeoutMs": 3000,
+      "useGnomeLocation": true
+    }
+  }
 }
 ```
 
 Set `location` to a `{"latitude": …, "longitude": …}` object to pin the report
-to one place and skip every other source. Set it to `"auto"` to follow GNOME
-and GeoClue, or to `"ip"` to resolve approximate coordinates from the public
-IP address through `https://ipwho.is/`. Every key is optional.
+to one place and skip every other source. Set it to `"auto"`, the default, to
+follow GNOME and GeoClue, or to `"ip"` to resolve approximate coordinates from
+the public IP address through `https://ipwho.is/`. Every key is optional:
+
+| Key | Default | Accepted values |
+|---|---|---|
+| `location` | `"auto"` | `"auto"`, `"ip"`, or a coordinate object |
+| `fallback` | `null` | `null` or a coordinate object |
+| `cacheTtlMs` | `1800000` | 0 through 86,400,000; 0 turns the location cache off |
+| `detectTimeoutMs` | `3000` | 0 through 15,000; 0 turns GeoClue detection off |
+| `useGnomeLocation` | `true` | `true` or `false` |
+
+A coordinate object holds a `latitude` from -90 through 90 and a `longitude`
+from -180 through 180. pico-argos passes the `plugins.weather` object to the
+plugin as JSON in the `PICO_ARGOS_CONFIG` environment variable. An invalid
+object, an unknown key, or an out-of-range value fails the refresh with an
+error that names the problem, and the panel keeps its last state.
 
 IP mode sends one HTTPS request to `ipwho.is` when its separate 30-minute cache
 is empty; the request necessarily reveals the public IP address to that

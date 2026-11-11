@@ -11,13 +11,12 @@ import {
     cacheDocument,
     glanceUri,
     MAX_CACHE_BYTES,
-    MAX_CONFIG_BYTES,
     parseCachedLocation,
     parseGnomeLocations,
     parseIpLocationResponse,
-    parseWeatherConfig,
     resolveLocation,
 } from './location.js';
+import {readWeatherSettings} from './settings.js';
 
 const WEATHER_SOURCE = 'https://weather.yauhen.cc/api/v1/glance';
 const IP_LOCATION_SOURCE =
@@ -37,7 +36,7 @@ const DESKTOP_ID = 'pico-argos-weather';
 const GNOME_WEATHER_SCHEMA = 'org.gnome.shell.weather';
 
 try {
-    const config = loadConfiguration();
+    const config = readWeatherSettings();
     const nowMs = Date.now();
     let gnome = null;
     let ip = null;
@@ -236,15 +235,6 @@ function releaseClient(clientPath) {
     } catch {
         // The connection closes on exit, which releases the client anyway.
     }
-}
-
-function loadConfiguration() {
-    const value = readBoundedJson(GLib.build_filenamev([
-        GLib.get_user_config_dir(),
-        'pico-argos',
-        'weather.json',
-    ]), MAX_CONFIG_BYTES, 'configuration');
-    return parseWeatherConfig(value ?? undefined);
 }
 
 function loadCachedLocation(config, nowMs, cacheName) {

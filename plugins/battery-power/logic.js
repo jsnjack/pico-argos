@@ -21,6 +21,9 @@ export const SNAP_W = 5;
 /** Below this the battery is neither charging nor discharging. */
 export const FLOW_THRESHOLD_W = 0.05;
 
+/** A name the kernel power-supply class may give a supply, such as `BAT1`. */
+export const SUPPLY_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
+
 const MAX_PANEL_WATTS = 9_999;
 const ESTIMATE_STEP_MINUTES = 5;
 const COARSE_ESTIMATE_STEP_MINUTES = 15;

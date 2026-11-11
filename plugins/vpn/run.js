@@ -1,18 +1,15 @@
 #!/usr/bin/env -S gjs -m
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
 import System from 'system';
 
 import {vpnSnapshot} from './logic.js';
+import {readVpnSettings} from './settings.js';
 
 try {
-    const uri = GLib.getenv('VPN_STATUS_URL') ??
-        'https://web-api.nordvpn.com/v1/ips/info';
-    if (!uri.startsWith('https://'))
-        throw new Error('VPN_STATUS_URL must use HTTPS');
-    const message = Soup.Message.new('GET', uri);
+    const {statusUrl} = readVpnSettings();
+    const message = Soup.Message.new('GET', statusUrl);
     message.request_headers.append('Accept', 'application/json');
     message.request_headers.append('User-Agent', 'pico-argos-vpn');
     const bytes = readBoundedResponse(

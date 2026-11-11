@@ -17,6 +17,7 @@ import {
     SeverityHold,
     systemSnapshot,
 } from './metrics.js';
+import {readSystemMonitorSettings} from './settings.js';
 import {SystemTimingTrace} from './timing-trace.js';
 
 const MAX_FILE_BYTES = 64 * 1_024;
@@ -65,7 +66,8 @@ class SampleBudget {
     }
 }
 
-const config = loadConfig();
+const config = readSystemMonitorSettings(
+    message => printerr(`[system-monitor] ${message}`));
 const timingTrace = config.diagnosticTracePath === null
     ? null
     : new SystemTimingTrace(config.diagnosticTracePath);
@@ -356,96 +358,6 @@ function monitorResolutionChanges() {
     }
 }
 
-function loadConfig() {
-    const defaults = {
-        fastIntervalMs: 250,
-        diskIntervalMs: 500,
-        memoryIntervalMs: 1_000,
-        fields: ['cpu', 'gpu', 'memory', 'disk', 'network'],
-        gpuDevice: 'auto',
-        diskDevice: 'auto',
-        networkInterface: 'auto',
-        presentation: 'legacy',
-        thresholds: {},
-        diagnosticTracePath: null,
-    };
-    let value = {};
-    try {
-        value = JSON.parse(readBoundedFile('config.json'));
-    } catch (error) {
-        const missing = error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND) ||
-            error.matches?.(GLib.FileError, GLib.FileError.NOENT);
-        if (!missing)
-            printerr(`[system-monitor] Ignoring invalid config.json: ${error.message}`);
-    }
-    const allowed = new Set([
-        'fastIntervalMs',
-        'diskIntervalMs',
-        'memoryIntervalMs',
-        'fields',
-        'gpuDevice',
-        'diskDevice',
-        'networkInterface',
-        'presentation',
-        'thresholds',
-        'diagnosticTracePath',
-    ]);
-    const unknown = Object.keys(value).find(key => !allowed.has(key));
-    if (unknown !== undefined)
-        throw new Error(`Unknown config field: ${unknown}`);
-    const result = {...defaults, ...value};
-    requireRange(result.fastIntervalMs, 100, 2_000, 'fastIntervalMs');
-    requireRange(result.diskIntervalMs, 100, 10_000, 'diskIntervalMs');
-    requireRange(result.memoryIntervalMs, 100, 10_000, 'memoryIntervalMs');
-    if (!Array.isArray(result.fields) || result.fields.length === 0 ||
-        result.fields.length > 5 || new Set(result.fields).size !== result.fields.length ||
-        result.fields.some(field => !['cpu', 'gpu', 'memory', 'disk', 'network'].includes(field))) {
-        throw new Error('fields must contain unique CPU, GPU, memory, disk, or network names');
-    }
-    if (typeof result.gpuDevice !== 'string' ||
-        !/^(auto|card[0-9]{1,3})$/.test(result.gpuDevice))
-        throw new Error('Invalid gpuDevice');
-    for (const field of ['diskDevice', 'networkInterface']) {
-        if (typeof result[field] !== 'string' || !/^(auto|[A-Za-z0-9_.:-]+)$/.test(result[field]))
-            throw new Error(`Invalid ${field}`);
-    }
-    if (!['legacy', 'compact'].includes(result.presentation))
-        throw new Error('presentation must be legacy or compact');
-    if (result.diagnosticTracePath !== null &&
-        (typeof result.diagnosticTracePath !== 'string' ||
-            !GLib.path_is_absolute(result.diagnosticTracePath))) {
-        throw new Error('diagnosticTracePath must be null or an absolute path');
-    }
-    result.thresholds = validateThresholds(result.thresholds);
-    return result;
-}
-
-function validateThresholds(value) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value))
-        throw new Error('thresholds must be an object');
-    const result = {};
-    for (const [field, threshold] of Object.entries(value)) {
-        if (!['cpu', 'gpu', 'memory', 'disk'].includes(field) || threshold === null ||
-            typeof threshold !== 'object' || Array.isArray(threshold) ||
-            Object.keys(threshold).some(key => !['warning', 'critical'].includes(key))) {
-            throw new Error(`Invalid threshold field: ${field}`);
-        }
-        const normalized = {};
-        for (const key of ['warning', 'critical']) {
-            if (threshold[key] === undefined)
-                continue;
-            requireRange(threshold[key], 1, 100, `${field}.${key}`);
-            normalized[key] = threshold[key];
-        }
-        if (normalized.warning !== undefined && normalized.critical !== undefined &&
-            normalized.warning >= normalized.critical) {
-            throw new Error(`${field}.warning must be below ${field}.critical`);
-        }
-        result[field] = normalized;
-    }
-    return result;
-}
-
 function resolveNetworkInterface(configured) {
     if (configured !== 'auto')
         return configured;
@@ -577,11 +489,6 @@ function safely(callback) {
     } catch (_error) {
         return null;
     }
-}
-
-function requireRange(value, minimum, maximum, name) {
-    if (!Number.isInteger(value) || value < minimum || value > maximum)
-        throw new Error(`${name} must be from ${minimum} through ${maximum}`);
 }
 
 function readBoundedFile(path) {

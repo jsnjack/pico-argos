@@ -5,6 +5,12 @@ import GLib from 'gi://GLib';
 import {parseManifest} from '../pico-argos@jsnjack.github.io/lib/manifest.js';
 import {PANEL_TEXT_LIMIT} from './battery-power/logic.js';
 
+// Settings arrive in PICO_ARGOS_CONFIG; only secrets pass through the environment.
+const SECRET_ENVIRONMENT = {
+    'dependabot': ['GITHUB_TOKEN'],
+    'pull-reviews': ['GITHUB_TOKEN'],
+};
+
 for (const id of [
     'battery-power',
     'system-monitor',
@@ -35,6 +41,9 @@ for (const id of [
     if (id === 'audio-devices' &&
         (manifest.position !== 'right' || manifest.order !== 40))
         throw new Error('Audio devices must sit beside the right-side system controls');
+    if (JSON.stringify(manifest.passEnvironment) !==
+        JSON.stringify(SECRET_ENVIRONMENT[id] ?? []))
+        throw new Error(`Reference plugin passes more than its secrets: ${id}`);
     const source = GLib.build_filenamev([directory, 'run.js']);
     if (!GLib.file_test(source, GLib.FileTest.IS_EXECUTABLE))
         throw new Error(`Reference plugin executable is not executable: ${id}`);

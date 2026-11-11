@@ -1,6 +1,0 @@
-{
-  "intervalMs": 2000,
-  "battery": "auto",
-  "smoothing": 0.25,
-  "hysteresisWatts": 0.4
-}

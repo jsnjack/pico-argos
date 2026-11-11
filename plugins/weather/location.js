@@ -2,7 +2,6 @@
 
 export const DEFAULT_CACHE_TTL_MS = 1_800_000;
 export const DEFAULT_DETECT_TIMEOUT_MS = 3_000;
-export const MAX_CONFIG_BYTES = 64 * 1_024;
 export const MAX_CACHE_BYTES = 4 * 1_024;
 export const COORDINATE_DECIMALS = 4;
 
