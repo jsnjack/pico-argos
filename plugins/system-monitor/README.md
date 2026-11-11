@@ -24,8 +24,12 @@ instead of spawning a vendor utility.
 `presentation` defaults to `legacy`. Set it to `compact` for the cleaner
 uppercase, abbreviated-rate layout; both layouts remain fixed-width. Optional
 per-metric warning and critical thresholds change only the extension-owned
-severity style. The menu aligns detailed values and identifies the resolved
-block device and network interface without adding recurring work.
+severity style of the whole label. CPU, GPU, and disk activity spike briefly
+during ordinary work, so each of their thresholds takes effect only after
+3 seconds of samples at or above it, and clears only after 3 seconds below it.
+Memory follows the current sample. The menu aligns detailed values and
+identifies the resolved block device and network interface without adding
+recurring work.
 
 For physical acceptance only, `diagnosticTracePath` may be set to an absolute
 path in an already-created private directory. The plugin then retains at most

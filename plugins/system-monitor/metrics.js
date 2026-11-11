@@ -88,6 +88,13 @@ export function networkRates(previous, current, elapsedMs, fastIntervalMs) {
 }
 
 const ALL_FIELDS = Object.freeze(['cpu', 'gpu', 'memory', 'disk', 'network']);
+/** How long a spiky metric must stay over or under a threshold to change severity. */
+export const SEVERITY_HOLD_MS = 3_000;
+const HELD_FIELDS = new Set(['cpu', 'gpu', 'disk']);
+// Timers fire a few milliseconds after their deadline, so three 1-second
+// intervals can measure 2,998 ms. The slack stays below the 100-ms minimum
+// sampling interval, so it never ends a hold one sample early.
+const HOLD_TIMER_SLACK_MS = 50;
 
 /** Formats one constant-width combined system label for selected fields. */
 export function formatSystemLabel(
@@ -165,7 +172,8 @@ export function systemSnapshot(metrics, fields = ALL_FIELDS, options = {}) {
             text,
             appearance: 'monospace',
             accessibleName: `System utilization: ${text}`,
-            severity: metricSeverity(metrics, fields, options.thresholds ?? {}),
+            severity: options.severity ??
+                metricSeverity(metrics, fields, options.thresholds ?? {}),
         },
         menu,
     };
@@ -213,19 +221,58 @@ function detail(id, name, value) {
     };
 }
 
-function metricSeverity(metrics, fields, thresholds) {
-    let warning = false;
+/**
+ * Debounces threshold crossings so a brief spike does not flash the panel.
+ *
+ * Each warning or critical threshold of a held field becomes active once every
+ * sample for `holdMs` has been at or above it, and inactive once every sample
+ * for `holdMs` has been below it. Memory changes slowly, so it is not held.
+ */
+export class SeverityHold {
+    constructor(thresholds, holdMs = SEVERITY_HOLD_MS) {
+        this._thresholds = thresholds;
+        this._holdMs = holdMs;
+        this._latches = new Map();
+    }
+
+    /** Records one sample taken at monotonic `nowMs` and returns its severity. */
+    update(metrics, fields, nowMs) {
+        return metricSeverity(metrics, fields, this._thresholds, (field, level, over) =>
+            HELD_FIELDS.has(field) ? this._hold(`${field}.${level}`, over, nowMs) : over);
+    }
+
+    _hold(key, over, nowMs) {
+        let latch = this._latches.get(key);
+        if (latch === undefined) {
+            latch = {active: false, agreedMs: nowMs};
+            this._latches.set(key, latch);
+        }
+        if (over === latch.active) {
+            latch.agreedMs = nowMs;
+        } else if (nowMs - latch.agreedMs + HOLD_TIMER_SLACK_MS >= this._holdMs) {
+            latch.active = over;
+            latch.agreedMs = nowMs;
+        }
+        return latch.active;
+    }
+}
+
+function metricSeverity(metrics, fields, thresholds, isActive = (_field, _level, over) => over) {
+    let severity = 'normal';
     for (const field of fields) {
         const threshold = thresholds[field];
-        const value = field === 'memory' ? metrics.memory : metrics[field];
-        if (threshold === undefined || !Number.isFinite(value))
+        if (threshold === undefined)
             continue;
-        if (threshold.critical !== undefined && value >= threshold.critical)
-            return 'critical';
-        if (threshold.warning !== undefined && value >= threshold.warning)
-            warning = true;
+        const value = metrics[field];
+        for (const level of ['warning', 'critical']) {
+            if (threshold[level] === undefined)
+                continue;
+            const over = Number.isFinite(value) && value >= threshold[level];
+            if (isActive(field, level, over) && severity !== 'critical')
+                severity = level;
+        }
     }
-    return warning ? 'warning' : 'normal';
+    return severity;
 }
 
 function clamp(value, minimum, maximum) {

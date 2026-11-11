@@ -10,6 +10,7 @@ import {
     parseGpuUsage,
     parseMemoryUsage,
     parseNetworkCounters,
+    SeverityHold,
     systemSnapshot,
 } from './metrics.js';
 
@@ -102,4 +103,45 @@ const critical = systemSnapshot(metrics, undefined, {
 });
 if (critical.panel.severity !== 'critical')
     throw new Error('System thresholds did not select critical severity');
+
+function heldSeverities(samples) {
+    const limits = {warning: 80, critical: 90};
+    const hold = new SeverityHold({cpu: limits, gpu: limits, memory: limits}, 3_000);
+    return samples.map(([nowMs, values]) => hold.update(
+        {cpu: null, gpu: null, memory: null, ...values}, ['cpu', 'gpu', 'memory'], nowMs));
+}
+
+function expectSeverities(samples, expected, message) {
+    const actual = heldSeverities(samples);
+    if (JSON.stringify(actual) !== JSON.stringify(expected))
+        throw new Error(`${message}: expected ${expected.join(',')}, got ${actual.join(',')}`);
+}
+
+expectSeverities(
+    [[0, {cpu: 10}], [1_000, {cpu: 95}], [2_000, {cpu: 95}], [3_000, {cpu: 10}],
+        [4_000, {cpu: 10}]],
+    ['normal', 'normal', 'normal', 'normal', 'normal'],
+    'A CPU spike shorter than the hold changed severity');
+expectSeverities(
+    [[0, {cpu: 10}], [1_000, {cpu: 95}], [2_000, {cpu: 95}], [3_000, {cpu: 95}],
+        [4_000, {cpu: 10}], [5_000, {cpu: 10}], [6_000, {cpu: 10}]],
+    ['normal', 'normal', 'normal', 'critical', 'critical', 'critical', 'normal'],
+    'Sustained CPU load did not turn critical and clear after the hold');
+expectSeverities(
+    [[0, {cpu: 10}], [1_004, {cpu: 95}], [2_001, {cpu: 95}], [3_002, {cpu: 95}]],
+    ['normal', 'normal', 'normal', 'critical'],
+    'Late timer callbacks delayed the hold by one sample');
+expectSeverities(
+    [[0, {cpu: 10}], [100, {cpu: 95}], [2_900, {cpu: 95}], [3_000, {cpu: 95}]],
+    ['normal', 'normal', 'normal', 'critical'],
+    'The timer slack ended a hold one 100-ms sample early');
+expectSeverities(
+    [[0, {gpu: 10}], [1_000, {gpu: 85}], [2_000, {gpu: 95}], [3_000, {gpu: 85}],
+        [4_000, {gpu: 95}]],
+    ['normal', 'normal', 'normal', 'warning', 'warning'],
+    'GPU load alternating between thresholds did not settle on warning');
+expectSeverities(
+    [[0, {memory: 95}], [1_000, {memory: 85}], [2_000, {memory: 50}]],
+    ['critical', 'warning', 'normal'],
+    'Memory severity did not follow the current sample');
 print('ok - system monitor parses counters and formats both fixed-width presentations');
