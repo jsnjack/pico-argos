@@ -97,45 +97,53 @@ const HELD_FIELDS = new Set(['cpu', 'gpu', 'disk']);
 const HOLD_TIMER_SLACK_MS = 50;
 
 /** Formats one constant-width combined system label for selected fields. */
-export function formatSystemLabel(
-    {cpu, gpu, memory, disk, receive, transmit}, fields = ALL_FIELDS,
-    presentation = 'legacy') {
+export function formatSystemLabel(metrics, fields = ALL_FIELDS, presentation = 'legacy') {
+    return systemLabelSegments(metrics, fields, presentation)
+        .map(segment => segment.text)
+        .join('');
+}
+
+/**
+ * Splits the combined label into one segment per selected field, each tagged
+ * with that field's severity, so only a metric over its threshold is colored.
+ * A segment after the first starts with the separator, so the joined text is
+ * exactly the fixed-width label.
+ */
+function systemLabelSegments(
+    {cpu, gpu, memory, disk, receive, transmit}, fields, presentation, severities = {}) {
     const selected = new Set(fields);
-    if (presentation === 'compact') {
-        const parts = [];
-        if (selected.has('cpu'))
-            parts.push(`CPU ${formatPercent(cpu)}%`);
-        if (selected.has('gpu'))
-            parts.push(`GPU ${formatPercent(gpu)}%`);
-        if (selected.has('memory'))
-            parts.push(`MEM ${formatPercent(memory)}%`);
-        if (selected.has('disk'))
-            parts.push(`IO ${formatPercent(disk)}%`);
-        if (selected.has('network')) {
-            parts.push(`↓${formatCompactRate(receive)}`);
-            parts.push(`↑${formatCompactRate(transmit)}`);
-        }
-        return parts.join('  ');
-    }
     const parts = [];
+    const add = (field, text) => parts.push({field, text});
+    const compact = presentation === 'compact';
     if (selected.has('cpu'))
-        parts.push(`cpu ${formatPercent(cpu)}%`);
+        add('cpu', `${compact ? 'CPU' : 'cpu'} ${formatPercent(cpu)}%`);
     if (selected.has('gpu'))
-        parts.push(`gpu ${formatPercent(gpu)}%`);
+        add('gpu', `${compact ? 'GPU' : 'gpu'} ${formatPercent(gpu)}%`);
     if (selected.has('memory'))
-        parts.push(`mem ${formatPercent(memory)}%`);
+        add('memory', `${compact ? 'MEM' : 'mem'} ${formatPercent(memory)}%`);
     if (selected.has('disk'))
-        parts.push(`io ${formatPercent(disk)}%`);
-    if (selected.has('network'))
-        parts.push(`⏷ ${formatRate(receive)} ⏶ ${formatRate(transmit)}`);
-    return parts.join(' ');
+        add('disk', `${compact ? 'IO' : 'io'} ${formatPercent(disk)}%`);
+    if (selected.has('network') && compact)
+        add('network', `↓${formatCompactRate(receive)}  ↑${formatCompactRate(transmit)}`);
+    else if (selected.has('network'))
+        add('network', `⏷ ${formatRate(receive)} ⏶ ${formatRate(transmit)}`);
+    const separator = compact ? '  ' : ' ';
+    return parts.map(({field, text}, index) => ({
+        text: index === 0 ? text : `${separator}${text}`,
+        severity: severities[field] ?? 'normal',
+    }));
 }
 
 /** Creates the public protocol snapshot for the combined indicator. */
 export function systemSnapshot(metrics, fields = ALL_FIELDS, options = {}) {
     const selected = new Set(fields);
     const presentation = options.presentation ?? 'legacy';
-    const text = formatSystemLabel(metrics, fields, presentation);
+    const segments = systemLabelSegments(
+        metrics,
+        fields,
+        presentation,
+        options.severities ?? metricSeverities(metrics, fields, options.thresholds ?? {}));
+    const text = segments.map(segment => segment.text).join('');
     const menu = [];
     if (selected.has('cpu'))
         menu.push(detail('cpu', 'CPU utilization', formatDetail(metrics.cpu)));
@@ -169,11 +177,9 @@ export function systemSnapshot(metrics, fields = ALL_FIELDS, options = {}) {
         type: 'snapshot',
         panel: {
             visible: true,
-            text,
+            segments,
             appearance: 'monospace',
             accessibleName: `System utilization: ${text}`,
-            severity: options.severity ??
-                metricSeverity(metrics, fields, options.thresholds ?? {}),
         },
         menu,
     };
@@ -235,9 +241,9 @@ export class SeverityHold {
         this._latches = new Map();
     }
 
-    /** Records one sample taken at monotonic `nowMs` and returns its severity. */
+    /** Records one sample taken at monotonic `nowMs` and returns each field's severity. */
     update(metrics, fields, nowMs) {
-        return metricSeverity(metrics, fields, this._thresholds, (field, level, over) =>
+        return metricSeverities(metrics, fields, this._thresholds, (field, level, over) =>
             HELD_FIELDS.has(field) ? this._hold(`${field}.${level}`, over, nowMs) : over);
     }
 
@@ -257,22 +263,25 @@ export class SeverityHold {
     }
 }
 
-function metricSeverity(metrics, fields, thresholds, isActive = (_field, _level, over) => over) {
-    let severity = 'normal';
+function metricSeverities(
+    metrics, fields, thresholds, isActive = (_field, _level, over) => over) {
+    const severities = {};
     for (const field of fields) {
-        const threshold = thresholds[field];
-        if (threshold === undefined)
-            continue;
+        let severity = 'normal';
+        const threshold = thresholds[field] ?? {};
         const value = metrics[field];
+        // Every level is checked on every sample so each hold sees it; a
+        // later, higher level overrides an earlier one.
         for (const level of ['warning', 'critical']) {
             if (threshold[level] === undefined)
                 continue;
             const over = Number.isFinite(value) && value >= threshold[level];
-            if (isActive(field, level, over) && severity !== 'critical')
+            if (isActive(field, level, over))
                 severity = level;
         }
+        severities[field] = severity;
     }
-    return severity;
+    return severities;
 }
 
 function clamp(value, minimum, maximum) {

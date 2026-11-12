@@ -446,8 +446,9 @@ by powers of 1,000.
 
 ### 7.7 System Panel Rendering
 
-All five metrics are rendered in one persistent `St.Label`. The string has
-fixed-width fields and uses a compact monospace style, for example:
+All five metrics are rendered in one persistent indicator as one panel
+segment per metric (Section 8.3). The joined string has fixed-width fields and
+uses a compact monospace style, for example:
 
 ```text
 cpu  12% gpu  34% mem  47% io   0% rx  123.4K tx    2.1M
@@ -457,9 +458,11 @@ The formatter MUST keep the number of characters constant across ordinary
 values and unit transitions. Overflow is clamped to the largest representable
 field. The containing actor has a stable width and allocation.
 
-One combined label deliberately replaces four independently updating Argos
-buttons. This reduces process launches, panel layout changes, property writes,
-and opportunities to trigger separate compositor frames.
+One combined indicator deliberately replaces four independently updating
+Argos buttons. This reduces process launches, panel layout changes, property
+writes, and opportunities to trigger separate compositor frames. Each segment
+carries its own metric's severity, so a threshold colors only the metric that
+crossed it; the panel-wide severity stays `normal`.
 
 ### 7.8 Plugin Configuration
 

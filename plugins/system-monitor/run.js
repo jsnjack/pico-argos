@@ -130,7 +130,7 @@ let nextMemoryUs = selectedFields.has('memory')
     ? startedUs + config.memoryIntervalMs * 1_000
     : Number.POSITIVE_INFINITY;
 const severityHold = new SeverityHold(config.thresholds);
-let severity = 'normal';
+let severities = {};
 let lastEmissionUs = startedUs;
 let lastSnapshot = null;
 let outputSequence = 0;
@@ -190,7 +190,7 @@ function sample() {
     }
 
     if (sampled)
-        severity = severityHold.update(metrics, config.fields, nowUs / 1_000);
+        severities = severityHold.update(metrics, config.fields, nowUs / 1_000);
 
     const sampleEndUs = GLib.get_monotonic_time();
     let formatBeginUs = 0;
@@ -203,7 +203,7 @@ function sample() {
         formatBeginUs = GLib.get_monotonic_time();
         const snapshot = JSON.stringify(systemSnapshot(metrics, config.fields, {
             presentation: config.presentation,
-            severity,
+            severities,
             gpuDevice,
             diskDevice,
             networkInterface,

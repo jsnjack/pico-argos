@@ -69,11 +69,12 @@ for (const values of [
     if ([...formatted].length !== 60)
         throw new Error(`System label width changed: ${formatted.length} ${JSON.stringify(formatted)}`);
 }
+const panelText = value => value.panel.segments.map(segment => segment.text).join('');
 const snapshot = systemSnapshot(metrics);
-if ([...snapshot.panel.text].length !== 60 || snapshot.menu.length !== 6)
+if (panelText(snapshot) !== label || snapshot.menu.length !== 6)
     throw new Error('System protocol snapshot is not fixed-width and complete');
 const selected = systemSnapshot(metrics, ['cpu', 'network']);
-if (selected.panel.text !== 'cpu  12% ⏷ 123.40 KBs ⏶   2.10 MBs' ||
+if (panelText(selected) !== 'cpu  12% ⏷ 123.40 KBs ⏶   2.10 MBs' ||
     JSON.stringify(selected.menu.map(item => item.id)) !==
         '["cpu","network-receive","network-transmit"]')
     throw new Error('System field selection changed ordering or retained omitted metrics');
@@ -86,10 +87,18 @@ const compact = systemSnapshot(metrics, undefined, {
     diskDevice: 'nvme0n1',
     networkInterface: 'wlp1s0',
 });
-if (compact.panel.text !==
+const compactText = panelText(compact);
+if (compactText !==
         'CPU  12%  GPU  34%  MEM  47%  IO   0%  ↓123.4K  ↑  2.1M' ||
-    [...compact.panel.text].length !== 55 ||
-    compact.panel.severity !== 'warning' ||
+    [...compactText].length !== 55 ||
+    JSON.stringify(compact.panel.segments) !== JSON.stringify([
+        {text: 'CPU  12%', severity: 'normal'},
+        {text: '  GPU  34%', severity: 'normal'},
+        {text: '  MEM  47%', severity: 'warning'},
+        {text: '  IO   0%', severity: 'normal'},
+        {text: '  ↓123.4K  ↑  2.1M', severity: 'normal'},
+    ]) ||
+    compact.panel.severity !== undefined ||
     compact.menu.find(item => item.id === 'source-0')?.text !==
         'GPU device: card1' ||
     compact.menu.find(item => item.id === 'source-1')?.text !==
@@ -99,16 +108,25 @@ if (compact.panel.text !==
     throw new Error(`Compact system presentation is invalid: ${JSON.stringify(compact)}`);
 }
 const critical = systemSnapshot(metrics, undefined, {
-    thresholds: {cpu: {warning: 5, critical: 10}},
+    thresholds: {cpu: {warning: 5, critical: 10}, gpu: {warning: 30}},
 });
-if (critical.panel.severity !== 'critical')
-    throw new Error('System thresholds did not select critical severity');
+if (JSON.stringify(critical.panel.segments.map(segment => segment.severity)) !==
+        '["critical","warning","normal","normal","normal"]')
+    throw new Error('System thresholds did not color only the metrics over them');
 
 function heldSeverities(samples) {
     const limits = {warning: 80, critical: 90};
     const hold = new SeverityHold({cpu: limits, gpu: limits, memory: limits}, 3_000);
-    return samples.map(([nowMs, values]) => hold.update(
-        {cpu: null, gpu: null, memory: null, ...values}, ['cpu', 'gpu', 'memory'], nowMs));
+    return samples.map(([nowMs, values]) => {
+        const severities = hold.update(
+            {cpu: null, gpu: null, memory: null, ...values}, ['cpu', 'gpu', 'memory'], nowMs);
+        // Each sample changes one field; the others stay normal.
+        const field = Object.keys(values)[0];
+        if (Object.entries(severities).some(([other, severity]) =>
+            other !== field && severity !== 'normal'))
+            throw new Error(`A ${field} sample changed another field's severity`);
+        return severities[field];
+    });
 }
 
 function expectSeverities(samples, expected, message) {

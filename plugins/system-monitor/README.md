@@ -23,8 +23,9 @@ instead of spawning a vendor utility.
 
 `presentation` defaults to `legacy`. Set it to `compact` for the cleaner
 uppercase, abbreviated-rate layout; both layouts remain fixed-width. Optional
-per-metric warning and critical thresholds change only the extension-owned
-severity style of the whole label. CPU, GPU, and disk activity spike briefly
+per-metric warning and critical thresholds color only the metric that crossed
+them, using the extension-owned severity style; the rest of the label keeps
+the normal panel color. CPU, GPU, and disk activity spike briefly
 during ordinary work, so each of their thresholds takes effect only after
 3 seconds of samples at or above it, and clears only after 3 seconds below it.
 Memory follows the current sample. The menu aligns detailed values and
