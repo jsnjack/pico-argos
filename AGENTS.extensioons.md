@@ -293,9 +293,14 @@ Write one compact UTF-8 JSON object. A snapshot example is:
 `panel` may be `null` to hide the indicator. Otherwise:
 
 - `visible` defaults to true.
-- A visible panel needs `text` or an icon-theme `icon`.
+- A visible panel needs `text`, `segments`, or an icon-theme `icon`.
 - `text` is plain text with no controls/newlines and at most 128 Unicode scalar
   values. Markup and Argos `| key=value` attributes are not interpreted.
+- `segments` replaces `text` to color only part of it: 1 to 16
+  `{"text": "...", "severity": "critical"}` objects, joined with no added
+  space, whose joined text follows the `text` rules. A segment with a
+  non-`normal` severity takes that color; the others use the panel style. Use
+  it, for example, to color only the metric over its threshold.
 - `appearance` is `normal`, `compact`, `monospace`, or `accent`. `accent` is
   larger, system-accent-colored text (when `severity` is `normal`); like every
   appearance value, the actual color and size are extension-owned CSS, never

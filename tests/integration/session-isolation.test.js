@@ -32,6 +32,7 @@ try {
         write(`repo/tests/integration/actor-harness/${name}`, 'fixture');
     for (const name of ['diagnostics', 'manifest', 'plugin-indicator', 'trace'])
         write(`repo/${uuid}/lib/${name}.js`, 'fixture');
+    write(`repo/${uuid}/stylesheet.css`, 'fixture');
     for (const name of ['plugin.json', 'run'])
         write(`repo/tests/fixtures/plugins/smoke/${name}`, 'fixture');
     write('bin/gnome-shell', '#!/bin/bash\necho "GNOME Shell 50.0"\n', true);

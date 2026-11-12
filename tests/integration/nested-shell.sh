@@ -74,6 +74,8 @@ cp "$repo_root/tests/fixtures/plugins/smoke/run" "$plugin_dir/"
 chmod 700 "$plugin_dir/run"
 cp "$repo_root/tests/integration/actor-harness/metadata.json" "$actor_dir/"
 cp "$repo_root/tests/integration/actor-harness/extension.js" "$actor_dir/"
+# The production stylesheet lets the harness assert computed severity colors.
+cp "$repo_root/pico-argos@jsnjack.github.io/stylesheet.css" "$actor_dir/"
 cp "$repo_root/pico-argos@jsnjack.github.io/lib/diagnostics.js" "$actor_dir/lib/"
 cp "$repo_root/pico-argos@jsnjack.github.io/lib/manifest.js" "$actor_dir/lib/"
 cp "$repo_root/pico-argos@jsnjack.github.io/lib/plugin-indicator.js" "$actor_dir/lib/"

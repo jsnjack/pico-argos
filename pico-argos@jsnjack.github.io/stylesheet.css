@@ -13,6 +13,12 @@
   spacing: 0.2em;
 }
 
+/* Segments join into one continuous text run, so fixed-width fields stay
+   aligned. */
+.pico-argos-segments {
+  spacing: 0;
+}
+
 .pico-argos-appearance-monospace .pico-argos-label {
   font-family: monospace;
   font-size: 13px;
@@ -27,15 +33,21 @@
   color: -st-accent-color;
 }
 
-.pico-argos-severity-positive {
+/* A colored segment shares its color with the whole-panel severity. Its
+   three-class selector outranks the accent rule above, so a segment keeps
+   its severity color inside an accent panel. */
+.pico-argos-severity-positive,
+.pico-argos-content .pico-argos-label.pico-argos-segment-positive {
   color: #33d17a;
 }
 
-.pico-argos-severity-warning {
+.pico-argos-severity-warning,
+.pico-argos-content .pico-argos-label.pico-argos-segment-warning {
   color: #f5c211;
 }
 
-.pico-argos-severity-critical {
+.pico-argos-severity-critical,
+.pico-argos-content .pico-argos-label.pico-argos-segment-critical {
   color: #a51d2d;
 }
 

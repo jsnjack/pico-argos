@@ -614,9 +614,18 @@ Top-level rules:
 Panel rules:
 
 - `visible` is boolean and defaults to true.
-- At least one of `text` or `icon` is required when visible.
+- At least one of `text`, `segments`, or `icon` is required when visible.
 - `text` is plain UTF-8 text, at most 128 Unicode scalar values.
 - Panel text contains no newline or control character.
+- `segments` replaces `text` when parts of the text need different severity
+  colors, and the two are mutually exclusive. It is an array of 1 to 16
+  objects with a non-empty plain `text` and an optional `severity` (default
+  `normal`) and no other field. The joined segment text follows every panel
+  text rule and is the panel text for every other purpose, including
+  `reserveTextChars` and the default accessible name. A segment whose severity
+  is not `normal` is drawn in that severity's color; every other segment uses
+  the panel's own style. Segments are joined with no added space, so a plugin
+  includes its separators in the segment text.
 - `icon` is a GNOME icon-theme name matching
   `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`.
 - `appearance` is `accent`, `compact`, `monospace`, or `normal`. `accent`
@@ -923,12 +932,19 @@ Each indicator creates when its plugin is accepted:
 - one persistent `St.Icon`, initially hidden if unused
 - one persistent `St.Label`, initially hidden if unused
 
+The first snapshot with `segments` adds one row container with one `St.Label`
+per segment, in place of the single label. The row and its labels are retained
+for the indicator's lifetime: a shorter segment list hides the unused labels,
+and switching back to `text` hides the row, so neither destroys an actor. Each
+update writes only the segment labels whose text or severity changed.
+
 Normal updates change only values whose semantic fields differ. Children are
 never removed and re-added during a refresh. Style classes come from a fixed
 extension-owned set.
 
 Plugins using `appearance: "monospace"` and nonzero `reserveTextChars` receive
-a stable allocation derived from that limit. Other indicators use stable
+a stable allocation derived from that limit, on the single label or on the
+segment row, whichever shows the text. Other indicators use stable
 minimum/maximum dimensions where their content permits it. No animation is used
 for periodic data changes.
 
@@ -1368,6 +1384,12 @@ Mutation counters are assertions:
 
 - 10,000 identical refreshes produce zero property writes after initialization.
 - 10,000 changing text refreshes produce no actor creation or destruction.
+- Changing one segment's text writes only that label; changing its severity
+  performs one style write; switching between text and segments, or shortening
+  the segment list, creates or destroys no actor after the first segmented
+  snapshot.
+- Against the production stylesheet, only a segment with a non-`normal`
+  severity takes that severity's color, including in `accent` appearance.
 - Closed menus produce no plugin-provided menu content actors before first
   open, beyond the fixed footer items created eagerly on attach.
 - A menu can actually be opened (`menu.isOpen` becomes true) before any

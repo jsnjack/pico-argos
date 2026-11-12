@@ -59,6 +59,44 @@ const positive = parseProtocolMessage(JSON.stringify({
 }));
 assertEqual(positive.snapshot.panel.severity, 'positive', 'positive severity');
 
+const segmented = parseProtocolMessage(JSON.stringify({
+    version: 1,
+    type: 'snapshot',
+    panel: {
+        segments: [
+            {text: 'cpu  96%', severity: 'critical'},
+            {text: ' gpu   3%'},
+        ],
+        appearance: 'monospace',
+    },
+    menu: [],
+}));
+assertEqual(segmented.snapshot.panel.text, 'cpu  96% gpu   3%', 'joined segment text');
+assertEqual(segmented.snapshot.panel.segments, [
+    {text: 'cpu  96%', severity: 'critical'},
+    {text: ' gpu   3%', severity: 'normal'},
+], 'segment severity default');
+assertEqual(segmented.snapshot.panel.severity, 'normal', 'segmented panel severity');
+if (!Object.isFrozen(segmented.snapshot.panel.segments) ||
+    !Object.isFrozen(segmented.snapshot.panel.segments[0]))
+    throw new Error('Validated panel segments must be immutable');
+assertEqual(positive.snapshot.panel.segments, null, 'unsegmented panel');
+
+const segmentPanel = segments => ({version: 1, type: 'snapshot', panel: {segments}, menu: []});
+assertInvalid({version: 1, type: 'snapshot', panel: {
+    text: 'a',
+    segments: [{text: 'b'}],
+}, menu: []}, /mutually exclusive/);
+assertInvalid(segmentPanel([]), /non-empty array/);
+assertInvalid(segmentPanel({text: 'a'}), /non-empty array/);
+assertInvalid(segmentPanel(Array.from({length: 17}, () => ({text: 'a'}))), /exceed 16/);
+assertInvalid(segmentPanel([{text: ''}]), /segment 0 text is empty/);
+assertInvalid(segmentPanel([{text: 'a', color: '#f00'}]), /unknown field: color/);
+assertInvalid(segmentPanel([{text: 'a', severity: 'loud'}]), /severity is invalid/);
+assertInvalid(segmentPanel([{text: 'a\n'}]), /control character/);
+assertInvalid(segmentPanel([{text: 'a'.repeat(100)}, {text: 'b'.repeat(29)}]),
+    /Panel text exceeds 128/);
+
 // A launch row names an installed application, never a command line: the ID
 // must be a plain `.desktop` basename in version 1 and version 2 alike.
 const launching = parseProtocolMessage(JSON.stringify({

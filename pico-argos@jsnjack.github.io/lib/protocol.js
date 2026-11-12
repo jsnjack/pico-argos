@@ -17,11 +17,15 @@ const MENU_OPEN_REQUEST_KEYS = new Set(['version', 'type']);
 const PANEL_KEYS = new Set([
     'visible',
     'text',
+    'segments',
     'icon',
     'appearance',
     'accessibleName',
     'severity',
 ]);
+const SEGMENT_KEYS = new Set(['text', 'severity']);
+/** Most panel segments one snapshot may carry. */
+export const MAX_PANEL_SEGMENTS = 16;
 const MENU_COMMON_KEYS = new Set(['id', 'kind']);
 const MENU_TEXT_KEYS = new Set(['id', 'kind', 'text']);
 const MENU_LINK_KEYS = new Set(['id', 'kind', 'text', 'uri']);
@@ -114,9 +118,12 @@ function validatePanel(value) {
     const visible = value.visible ?? true;
     requireBoolean(visible, 'Panel visible');
 
-    const text = value.text ?? null;
+    let text = value.text ?? null;
     if (text !== null)
         validateText(text, 128, 'Panel text');
+    const segments = validateSegments(value.segments ?? null, text);
+    if (segments !== null)
+        text = segments.map(segment => segment.text).join('');
 
     const icon = value.icon ?? null;
     if (icon !== null && (typeof icon !== 'string' || !ICON_PATTERN.test(icon)))
@@ -138,7 +145,32 @@ function validatePanel(value) {
     if (visible && text === null && accessibleName === null)
         throw new ProtocolError('Icon-only panel requires an accessible name');
 
-    return {visible, text, icon, appearance, accessibleName, severity};
+    return {visible, text, segments, icon, appearance, accessibleName, severity};
+}
+
+function validateSegments(value, text) {
+    if (value === null)
+        return null;
+    if (text !== null)
+        throw new ProtocolError('Panel text and segments are mutually exclusive');
+    if (!Array.isArray(value) || value.length === 0)
+        throw new ProtocolError('Panel segments must be a non-empty array');
+    if (value.length > MAX_PANEL_SEGMENTS)
+        throw new ProtocolError(`Panel segments exceed ${MAX_PANEL_SEGMENTS} entries`);
+    const segments = value.map((segment, index) => {
+        const context = `Panel segment ${index}`;
+        requirePlainObject(segment, context);
+        rejectUnknownKeys(segment, SEGMENT_KEYS, context);
+        validateText(segment.text, 128, `${context} text`);
+        if (segment.text.length === 0)
+            throw new ProtocolError(`${context} text is empty`);
+        const severity = segment.severity ?? 'normal';
+        if (!SEVERITIES.has(severity))
+            throw new ProtocolError(`${context} severity is invalid`);
+        return {text: segment.text, severity};
+    });
+    validateText(segments.map(segment => segment.text).join(''), 128, 'Panel text');
+    return segments;
 }
 
 function validateMenu(values, protocolVersion) {
@@ -286,8 +318,13 @@ function unicodeScalarCount(value) {
 }
 
 function freezeSnapshot(snapshot) {
-    if (snapshot.panel !== null)
+    if (snapshot.panel !== null) {
+        if (snapshot.panel.segments !== null) {
+            snapshot.panel.segments.forEach(segment => Object.freeze(segment));
+            Object.freeze(snapshot.panel.segments);
+        }
         Object.freeze(snapshot.panel);
+    }
     for (const item of snapshot.menu)
         Object.freeze(item);
     Object.freeze(snapshot.menu);

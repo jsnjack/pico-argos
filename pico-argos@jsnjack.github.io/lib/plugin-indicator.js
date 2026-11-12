@@ -30,6 +30,13 @@ const SEVERITY_CLASSES = Object.freeze({
     warning: 'pico-argos-severity-warning',
     critical: 'pico-argos-severity-critical',
 });
+// A normal segment inherits the panel's style; the others override its color.
+const SEGMENT_CLASSES = Object.freeze({
+    normal: 'pico-argos-label pico-argos-segment',
+    positive: 'pico-argos-label pico-argos-segment pico-argos-segment-positive',
+    warning: 'pico-argos-label pico-argos-segment pico-argos-segment-warning',
+    critical: 'pico-argos-label pico-argos-segment pico-argos-segment-critical',
+});
 
 /** Owns one plugin's persistent panel leaves and lazily keyed menu actors. */
 export class PluginIndicator {
@@ -48,6 +55,8 @@ export class PluginIndicator {
         this._restartSignalId = 0;
         this._ownedActorCount = 0;
         this._panel = null;
+        this._segmentBox = null;
+        this._segmentLabels = [];
         this._stale = false;
         this._styleClass = '';
         this._reservedWidthKey = null;
@@ -92,7 +101,7 @@ export class PluginIndicator {
     reconfigure(plugin) {
         this.plugin = plugin;
         if (this._attached && this._panel !== null)
-            this._applyReservedWidth(this._panel.appearance);
+            this._applyReservedWidth(this._panel.appearance, isSegmented(this._panel));
         if (this._footerBuilt) {
             const isStream = plugin.manifest.mode === 'stream';
             const canRefreshManually = !isStream &&
@@ -109,7 +118,7 @@ export class PluginIndicator {
         this._attached = true;
         this._ensureFooter();
         if (this._panel !== null)
-            this._applyReservedWidth(this._panel.appearance);
+            this._applyReservedWidth(this._panel.appearance, isSegmented(this._panel));
     }
 
     /** Applies only values that differ from the persistent actor model. */
@@ -152,6 +161,8 @@ export class PluginIndicator {
         this._content = null;
         this._icon = null;
         this._label = null;
+        this._segmentBox = null;
+        this._segmentLabels = [];
         this._footerItem = null;
         this._refreshItem = null;
         this._restartItem = null;
@@ -162,7 +173,8 @@ export class PluginIndicator {
     _applyPanel(panel, stale) {
         let writes = 0;
         const panelVisible = panel !== null && panel.visible;
-        if (panelVisible && panel.text !== null) {
+        const segmented = panelVisible && isSegmented(panel);
+        if (panelVisible && panel.text !== null && !segmented) {
             const textWrites = this._write(
                 this._label,
                 'text',
@@ -180,8 +192,17 @@ export class PluginIndicator {
         writes += this._write(
             this._label,
             'visible',
-            panelVisible && panel.text !== null,
+            panelVisible && panel.text !== null && !segmented,
             'visibility-writes');
+        if (segmented)
+            writes += this._applySegments(panel.segments);
+        if (this._segmentBox !== null) {
+            writes += this._write(
+                this._segmentBox,
+                'visible',
+                segmented,
+                'visibility-writes');
+        }
         if (panelVisible && panel.icon !== null) {
             writes += this._write(
                 this._icon,
@@ -211,11 +232,56 @@ export class PluginIndicator {
         const severity = panel?.severity ?? 'normal';
         if (panelVisible) {
             writes += this._applyStyle(appearance, severity, stale);
-            this._applyReservedWidth(appearance);
+            this._applyReservedWidth(appearance, segmented);
         }
         this._panel = panel;
         this._stale = stale;
         return writes;
+    }
+
+    /**
+     * Writes one retained label per segment. The row is created on the first
+     * segmented snapshot, and labels beyond the current count are hidden
+     * rather than destroyed, so a steady segment count creates no actors.
+     */
+    _applySegments(segments) {
+        if (this._segmentBox === null) {
+            this._segmentBox = new St.BoxLayout({
+                style_class: 'pico-argos-segments',
+                visible: false,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            this._recordCreation();
+            this._content.add_child(this._segmentBox);
+        }
+        let writes = 0;
+        let textWrites = 0;
+        segments.forEach((segment, index) => {
+            let label = this._segmentLabels[index];
+            if (label === undefined) {
+                label = new St.Label({
+                    style_class: SEGMENT_CLASSES.normal,
+                    y_align: Clutter.ActorAlign.CENTER,
+                    y_expand: true,
+                });
+                this._recordCreation();
+                this._segmentBox.add_child(label);
+                this._segmentLabels.push(label);
+            }
+            textWrites += this._write(label, 'text', segment.text, 'label-text-writes');
+            writes += this._write(label, 'visible', true, 'visibility-writes');
+            writes += this._write(
+                label,
+                'style_class',
+                SEGMENT_CLASSES[segment.severity],
+                'style-class-writes');
+        });
+        for (const label of this._segmentLabels.slice(segments.length))
+            writes += this._write(label, 'visible', false, 'visibility-writes');
+        // The same stale-pixel workaround as the single label; see _applyPanel.
+        if (textWrites !== 0 && this._actions.useExplicitPanelRedraw())
+            this.actor.queue_redraw();
+        return writes + textWrites;
     }
 
     _applyStyle(appearance, severity, stale) {
@@ -435,14 +501,17 @@ export class PluginIndicator {
         }
     }
 
-    _applyReservedWidth(appearance) {
+    _applyReservedWidth(appearance, segmented) {
         const reserve = this.plugin.manifest.reserveTextChars;
-        const key = `${appearance}:${reserve}`;
+        const key = `${appearance}:${reserve}:${segmented}`;
         if (key === this._reservedWidthKey)
             return;
+        // The reservation moves to whichever actor shows the text.
+        const target = segmented ? this._segmentBox : this._label;
+        const other = segmented ? this._label : this._segmentBox;
         let width = -1;
         if (reserve !== 0 && appearance === 'monospace') {
-            const text = this._label.clutter_text;
+            const text = (segmented ? this._segmentLabels[0] : this._label).clutter_text;
             const layout = Pango.Layout.new(text.get_layout().get_context());
             // Construct an owned description from the font name. Passing
             // ClutterText's borrowed FontDescription into a temporary layout
@@ -453,8 +522,12 @@ export class PluginIndicator {
             const [naturalWidth] = layout.get_pixel_size();
             width = Math.ceil(naturalWidth);
         }
-        if (this._label.width !== width)
-            this._label.width = width;
+        if (other !== null && this._reservedWidthKey !== null)
+            other.width = -1;
+        // Assign even when the current natural width already matches: the
+        // getter reports a measured width, so comparing against it could skip
+        // pinning a full-length text and let a shorter one shrink the actor.
+        target.width = width;
         this._reservedWidthKey = key;
     }
 
@@ -589,6 +662,10 @@ export class ProductionRenderer {
                 parent.set_child_at_index(entry.indicator.actor, desired);
         });
     }
+}
+
+function isSegmented(panel) {
+    return (panel.segments ?? null) !== null;
 }
 
 function panelBox(position) {

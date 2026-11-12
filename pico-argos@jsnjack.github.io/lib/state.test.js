@@ -81,6 +81,23 @@ const cases = [
         assertEqual(result.changes.menu.updated, [{id: 'b', changes: {fields: {text: 'Changed'}}}], 'updated menu items');
         assertEqual(result.changes.menu.order, ['b', 'c'], 'menu order');
     }],
+    ['segment severity changes are diffed by value', () => {
+        const store = new StateStore();
+        const snapshot = severity => JSON.stringify({
+            version: 1,
+            type: 'snapshot',
+            panel: {segments: [{text: 'cpu 96%', severity}, {text: ' mem 3%'}]},
+            menu: [],
+        });
+        store.accept('test', snapshot('normal'));
+        const same = store.accept('test', `${snapshot('normal')} `);
+        assertEqual(same.kind, 'semantic-no-op', 'equal segments');
+        const changed = store.accept('test', snapshot('critical'));
+        assertEqual(changed.changes.panel, {fields: {segments: [
+            {text: 'cpu 96%', severity: 'critical'},
+            {text: ' mem 3%', severity: 'normal'},
+        ]}}, 'only the segments field changes');
+    }],
     ['action selection changes update only the retained menu field', () => {
         const parser = raw => ({kind: 'snapshot', snapshot: JSON.parse(raw)});
         const store = new StateStore(parser);

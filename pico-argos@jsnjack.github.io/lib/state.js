@@ -5,6 +5,7 @@ import {parseProtocolMessage} from './protocol.js';
 const PANEL_FIELDS = [
     'visible',
     'text',
+    'segments',
     'icon',
     'appearance',
     'accessibleName',
@@ -13,6 +14,7 @@ const PANEL_FIELDS = [
 const ERROR_PANEL = Object.freeze({
     visible: true,
     text: null,
+    segments: null,
     icon: 'dialog-error-symbolic',
     appearance: 'compact',
     accessibleName: 'Plugin error',
@@ -244,10 +246,21 @@ function diffPanel(previous, next) {
 
     const fields = {};
     for (const field of PANEL_FIELDS) {
-        if (previous[field] !== next[field])
+        const equal = field === 'segments'
+            ? segmentsEqual(previous.segments ?? null, next.segments ?? null)
+            : previous[field] === next[field];
+        if (!equal)
             fields[field] = next[field];
     }
     return Object.keys(fields).length === 0 ? null : {fields};
+}
+
+function segmentsEqual(previous, next) {
+    if (previous === null || next === null)
+        return previous === next;
+    return previous.length === next.length && previous.every((segment, index) =>
+        segment.text === next[index].text &&
+        segment.severity === next[index].severity);
 }
 
 function diffMenu(previous, next) {

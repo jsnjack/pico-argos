@@ -26,6 +26,8 @@ export default class ActorHarnessExtension extends Extension {
     disable() {
         this._secondary?.destroy();
         this._secondary = null;
+        this._segments?.destroy();
+        this._segments = null;
         this._indicator?.destroy();
         this._indicator = null;
         // Closing a menu is not fully synchronous even with PopupAnimation.NONE;
@@ -36,6 +38,7 @@ export default class ActorHarnessExtension extends Extension {
         delete Main.panel.statusArea[TEST_ROLE];
         delete Main.panel.statusArea[`${TEST_ROLE}-secondary`];
         delete Main.panel.statusArea[`${TEST_ROLE}-footer-check`];
+        delete Main.panel.statusArea[`${TEST_ROLE}-segments`];
     }
 
     _runAssertions() {
@@ -68,6 +71,7 @@ export default class ActorHarnessExtension extends Extension {
         };
 
         this._assertMenuOpensBeforeAnyContent(actions);
+        this._assertSegmentsColorOnlyTheirText(actions);
 
         const initial = presentation('00000', baseMenu());
         this._indicator.applyPresentation(initial);
@@ -217,6 +221,79 @@ export default class ActorHarnessExtension extends Extension {
     }
 
     /**
+     * A segmented panel shows each segment in its own retained label, so a
+     * plugin such as the system monitor colors only the metric over its
+     * threshold. The harness ships the production stylesheet, so the colors
+     * asserted here are the ones St actually computes from it.
+     */
+    _assertSegmentsColorOnlyTheirText(actions) {
+        const diagnostics = new Diagnostics();
+        this._segments = new PluginIndicator(
+            fixturePlugin('actor-segments', 40, {reserveTextChars: 16}),
+            {nowUs: () => GLib.get_monotonic_time()},
+            diagnostics,
+            actions);
+        Main.panel.addToStatusArea(
+            `${TEST_ROLE}-segments`, this._segments.actor, 3, 'right');
+        this._segments.attach();
+        const indicator = this._segments;
+        const metrics = (cpu, severity, appearance = 'monospace') =>
+            segmentPresentation([
+                {text: `cpu ${cpu}%`, severity},
+                {text: ' gpu  3%', severity: 'normal'},
+            ], appearance);
+
+        indicator.applyPresentation(presentation('plain', Object.freeze([])));
+        const plain = mutations(diagnostics);
+        indicator.applyPresentation(metrics(' 96', 'critical'));
+        const segmented = mutations(diagnostics);
+        const [cpu, gpu] = indicator._segmentLabels;
+        assert(segmented['actor-creations'] - plain['actor-creations'] === 3,
+            'The first segmented snapshot did not create one row and two labels');
+        assert(!indicator._label.visible && indicator._segmentBox.visible &&
+            cpu.text === 'cpu  96%' && gpu.text === ' gpu  3%',
+        'Segments did not replace the single label');
+        assert(indicator._segmentBox.natural_width_set &&
+            !indicator._label.natural_width_set,
+        'The reserved width did not move to the segment row');
+
+        const critical = [0xa5, 0x1d, 0x2d];
+        assert(sameColor(foreground(cpu), critical),
+            `The critical segment is not #a51d2d: ${foreground(cpu)}`);
+        assert(sameColor(foreground(gpu), foreground(indicator._content)),
+            'A normal segment did not inherit the panel color');
+        indicator.applyPresentation(metrics(' 96', 'critical', 'accent'));
+        assert(sameColor(foreground(cpu), critical),
+            'The accent appearance overrode the critical segment color');
+        indicator.applyPresentation(metrics(' 96', 'critical'));
+
+        const beforeValues = mutations(diagnostics);
+        for (let index = 0; index < 1_000; index++)
+            indicator.applyPresentation(metrics(String(index % 100).padStart(3), 'critical'));
+        const afterValues = mutations(diagnostics);
+        assert(afterValues['actor-creations'] === beforeValues['actor-creations'] &&
+            afterValues['style-class-writes'] === beforeValues['style-class-writes'],
+        'Changing segment text created actors or rewrote style classes');
+        assert(afterValues['label-text-writes'] - beforeValues['label-text-writes'] === 1_000,
+            'Changing one segment did not write exactly that segment label');
+
+        indicator.applyPresentation(metrics(' 99', 'normal'));
+        const cleared = mutations(diagnostics);
+        assert(cleared['style-class-writes'] - afterValues['style-class-writes'] === 1 &&
+            cleared['label-text-writes'] === afterValues['label-text-writes'],
+        'Clearing one segment severity did more than one style write');
+
+        indicator.applyPresentation(presentation('plain', Object.freeze([])));
+        indicator.applyPresentation(segmentPresentation([{text: 'one'}]));
+        assert(cpu.visible && !gpu.visible,
+            'A shorter segment list did not hide the unused label');
+        indicator.applyPresentation(metrics(' 99', 'normal'));
+        assert(mutations(diagnostics)['actor-creations'] === segmented['actor-creations'] &&
+            mutations(diagnostics)['actor-destructions'] === 0,
+        'Switching between text and segments created or destroyed an actor');
+    }
+
+    /**
      * Regression test for a real bug: GNOME Shell's PopupMenu silently
      * refuses to open (isOpen stays false, no error) when its box has zero
      * children. A plugin indicator whose menu content is built only on first
@@ -298,21 +375,41 @@ function baseMenu() {
     ]);
 }
 
-function presentation(text, menu) {
+function presentation(text, menu, segments = null, appearance = 'monospace') {
     return Object.freeze({
         stale: false,
         snapshot: Object.freeze({
             panel: Object.freeze({
                 visible: true,
                 text,
+                segments,
                 icon: null,
-                appearance: 'monospace',
+                appearance,
                 accessibleName: 'Actor test indicator',
                 severity: 'normal',
             }),
             menu,
         }),
     });
+}
+
+function segmentPresentation(segments, appearance = 'monospace') {
+    const normalized = Object.freeze(segments.map(segment =>
+        Object.freeze({severity: 'normal', ...segment})));
+    return presentation(
+        normalized.map(segment => segment.text).join(''),
+        Object.freeze([]),
+        normalized,
+        appearance);
+}
+
+function foreground(actor) {
+    const color = actor.get_theme_node().get_foreground_color();
+    return [color.red, color.green, color.blue];
+}
+
+function sameColor(left, right) {
+    return left.every((channel, index) => channel === right[index]);
 }
 
 function mutations(diagnostics) {
